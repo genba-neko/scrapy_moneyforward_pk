@@ -1,0 +1,38 @@
+name: Python CI
+
+on:
+  push:
+    paths: ['**.py']
+  pull_request:
+    paths: ['**.py']
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: pip install -r workbench/python/requirements.txt
+      - run: pip install -r .workbench/python/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python -m ruff format --check .
+      - run: python -m ruff check
+      - run: python -m pyright
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: pip install -r workbench/python/requirements.txt
+      - run: pip install -r .workbench/python/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python -m pytest --cov --cov-report=term-missing
