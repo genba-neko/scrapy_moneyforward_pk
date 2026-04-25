@@ -60,3 +60,27 @@ def test_parse_accounts_all_done():
     response = make_response(html)
     _, is_updating = parse_accounts(response, today=date(2025, 1, 15))
     assert is_updating is False
+
+
+_UPDATING_ONLY_HTML = """
+<html><body>
+<table>
+  <tr><th>金融機関</th><th>残高</th><th>更新日</th><th>ステータス</th></tr>
+  <tr>
+    <td>更新中銀行</td>
+    <td>1,000円</td>
+    <td>2025/01/15 12:00</td>
+    <td><span id="js-status-sentence-span-1">更新中</span></td>
+  </tr>
+</table>
+</body></html>
+"""
+
+
+def test_parse_accounts_is_updating_branch():
+    """iter2 T4: a single 更新中 row must flip is_updating True for the caller."""
+    response = make_response(_UPDATING_ONLY_HTML)
+    items, is_updating = parse_accounts(response, today=date(2025, 1, 15))
+    assert is_updating is True
+    assert len(items) == 1
+    assert items[0]["account_status"] == "更新中"
