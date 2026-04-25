@@ -109,7 +109,7 @@ scrapy_moneyforward_pk/
 │           ├── logging_config.py
 │           ├── session_utils.py
 │           └── slack_notifier.py
-├── tests/                              # pytest (25 tests)
+├── tests/                              # pytest (81 tests, coverage 86%)
 ├── plan/
 ├── .env.example
 ├── requirements.txt
@@ -138,6 +138,51 @@ scrapy_moneyforward_pk/
 - パートナーポータル (`*.x.moneyforward.com`) は `XMoneyforwardLoginMixin`
   で拡張可能。v1 では具象スパイダー未提供。
 
+## 運用
+
+### 定期実行 (GitHub Actions)
+
+`.github/workflows/scrapy-nightly.yml` が毎日 18:00 UTC (JST 03:00) に
+`workflow_dispatch` 互換の smoke ジョブを起動する。submodule に依存しない
+ため、private workbench submodule の取得失敗で job が止まらない。
+本番のクロールは OS のスケジューラから `job_runner.bat` / `job_runner.sh`
+を起動する想定で、CI は `scrapy list` での import 健全性確認のみ。
+
+### Slack 通知
+
+`SLACK_INCOMING_WEBHOOK_URL` を設定すると `SlackNotifierExtension` が
+`spider_closed` シグナルに購読し、終了理由・取得件数・経過秒を 1 行の
+テキストで投稿する。未設定時は extension が `NotConfigured` を投げて
+スキップされ、no-op で動作する。
+
+### 出力ローテーション
+
+`JsonOutputPipeline.open_spider` 起動時に `OUTPUT_RETENTION_DAYS`
+(default 14、env で上書き) を超過した同一スパイダーの jsonl ファイルを
+削除する。他スパイダーのファイルは保持される。`0` を指定すると
+ローテーション無効。
+
+### セッション切れ時の再ログイン
+
+`PlaywrightSessionMiddleware` は `/sign_in` 等のログイン URL/タイトルを
+検出すると `meta["moneyforward_force_login"]=True` を立て、対象 Request
+を `MoneyforwardBase.handle_force_login` に渡す。これが
+`_build_login_request(follow_up=...)` を経由して新しいログイン試行を
+Request 化し、ログイン成功後に元の Request を再生する。再認証が
+発生したら stats counter `<spider>/login/forced` が 1 加算される。
+
+## セキュリティ
+
+- `paths.resolve_output_dir` は `is_relative_to(PROJECT_ROOT)` で
+  PROJECT_ROOT の外を指す `OUTPUT_DIR` を `ValueError` で拒否する。
+  シンボリックリンクや `..` を含むパスは `Path.resolve` で吸収。
+- `paths.sanitize_spider_name` は `[A-Za-z0-9_-]` 以外を `_` に置換し、
+  `..` や `/` を含むスパイダー名でも安全な出力ファイル名を生成する。
+- 認証情報 (`SITE_LOGIN_USER` / `SITE_LOGIN_PASS`) は `.env` から
+  load_dotenv で読み込まれ、コミット禁止 (`.gitignore` 推奨)。
+  `pytest` 実行時はモジュール import 時の load_dotenv をスキップして
+  シェル env が漏れないようにしている。
+
 ## 改善余地
 
 - パートナーポータル具象スパイダー (xmf_ssnb, xmf_mizuho ほか) の追加
@@ -145,4 +190,3 @@ scrapy_moneyforward_pk/
 - Playwright `storage_state` 永続化によるログインスキップ
 - HTML inspector middleware (デバッグ保存) の移植
 - 実通信を伴う integration テスト
-- Slack 通知の spider_closed フック統合
