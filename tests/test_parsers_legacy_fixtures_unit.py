@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from datetime import date
 
-import pytest
 from scrapy.http import HtmlResponse, Request
 
 from moneyforward_pk.spiders._parsers import (
@@ -62,21 +61,20 @@ def test_parse_accounts_real_legacy(fixture_html):
     assert len(keys) == 9
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Real legacy /cf markup uses <tr class='transaction_list'> directly "
-        "but the current selector '.transaction_list tr' looks for child trs. "
-        "Tracked for iter2 parser fix."
-    ),
-    strict=True,
-)
 def test_parse_transactions_real_legacy(fixture_html):
-    """Documents the parser regression on legacy /cf HTML.
+    """Legacy /cf capture yields rows whose class is on the ``<tr>`` itself.
 
-    The legacy capture exposes the row class on ``<tr>`` itself, not on a
-    wrapping ``<tbody>``. Until ``_parsers.parse_transactions`` is updated to
-    accept both shapes (planned iter2), this test must xfail to flag the gap.
+    iter2 T1: ``parse_transactions`` accepts both ``tr.transaction_list`` and
+    ``.transaction_list tr`` shapes. The captured fixture exposes three rows
+    with the class on ``<tr>`` directly.
     """
     body = fixture_html("mf_transaction_legacy.html")
     items = list(parse_transactions(_response(body), 2019, 11))
-    assert len(items) >= 1
+    assert len(items) == 3
+    first = items[0]
+    assert first["year_month"] == "201911"
+    assert first["data_table_sortable_value"].startswith("2019/11/30")
+    assert first["amount_number"] == -1458
+    # is_active must be True because the legacy fixture flags target-active.
+    assert first["is_active"] is True
+    assert first["lctg"] == "食費"

@@ -79,13 +79,8 @@ def test_parse_asset_allocation_empty():
     assert items == []
 
 
-def test_parse_asset_allocation_includes_all_tables_today():
-    """Document current behaviour: the parser walks every <table> on the page.
-
-    The legacy spec required only the first table. Tracked for an iter2
-    parser fix; this test pins the present (regressed) behaviour so the
-    intentional fix in iter2 produces a visible diff.
-    """
+def test_parse_asset_allocation_first_table_only():
+    """iter2 T1: parser walks only the first <table>; trailing summaries skipped."""
     response = make_response(SECOND_TABLE_FIXTURE)
     items = list(
         parse_asset_allocation(
@@ -93,6 +88,5 @@ def test_parse_asset_allocation_includes_all_tables_today():
         )
     )
     asset_types = [it["asset_type"] for it in items]
-    assert "portfolio_det_depo" in asset_types
-    # Current parser leaks the second table; iter2 fix flips this to NOT in.
-    assert "portfolio_det_unwanted" in asset_types
+    assert asset_types == ["portfolio_det_depo"]
+    assert "portfolio_det_unwanted" not in asset_types

@@ -26,9 +26,26 @@ _ACCOUNT_TRIM_RE = re.compile(r"^(.+?)\(本サイト\).*")
 def parse_transactions(
     response: Response, year: int, month: int
 ) -> Iterator[MoneyforwardTransactionItem]:
-    """Yield transaction items from a /cf monthly page."""
+    """Yield transaction items from a /cf monthly page.
+
+    Notes
+    -----
+    The legacy MoneyForward markup applies ``class="transaction_list"`` to the
+    ``<tr>`` rows directly. Some captures wrap rows in a parent element bearing
+    that class. Both shapes are accepted via the union selector below; rows are
+    de-duplicated by Selector identity to avoid double yields when a single row
+    matches both legs.
+    """
     year_month = f"{year:04d}{month:02d}"
-    for row in response.css(".transaction_list tr"):
+    seen_ids: set[int] = set()
+    rows = list(response.css("tr.transaction_list")) + list(
+        response.css(".transaction_list tr")
+    )
+    for row in rows:
+        row_id = id(row.root)
+        if row_id in seen_ids:
+            continue
+        seen_ids.add(row_id)
         sort_value = row.css("td.date::attr(data-table-sortable-value)").get()
         if not sort_value:
             continue
@@ -112,10 +129,13 @@ def parse_asset_allocation(
     today = today or date.today()
     year_month_day = today.strftime("%Y%m%d")
 
-    table = response.css("table").xpath(".")
-    if not table:
+    # Legacy spec: only the first <table> on /bs/portfolio carries asset rows.
+    # Subsequent tables are summary/footer markup that must not leak through.
+    tables = response.css("table")
+    if not tables:
         return
-    for row in response.css("table").xpath(".//tr"):
+    first_table = tables[0]
+    for row in first_table.xpath(".//tr"):
         asset_name = row.css("th a::text").get()
         if not asset_name:
             continue
