@@ -70,6 +70,19 @@ DOWNLOADER_MIDDLEWARES = {
     "scrapy.downloadermiddlewares.httpcompression.HttpCompressionMiddleware": 810,
 }
 
+# HTML inspector middleware — opt-in via env var (debug only). Stays enabled
+# in DOWNLOADER_MIDDLEWARES at all times but its process_response is a no-op
+# unless MONEYFORWARD_HTML_INSPECTOR is truthy. Env-driven so the flag flows
+# through both Scrapy settings and standalone tooling.
+MONEYFORWARD_HTML_INSPECTOR = os.environ.get(
+    "MONEYFORWARD_HTML_INSPECTOR", "false"
+).strip().lower() in {"1", "true", "yes", "on"}
+MONEYFORWARD_HTML_INSPECTOR_DIR = os.environ.get("MONEYFORWARD_HTML_INSPECTOR_DIR", "")
+MONEYFORWARD_RUNTIME_DIR = str(PROJECT_ROOT)
+DOWNLOADER_MIDDLEWARES[
+    "moneyforward_pk.middlewares.html_inspector.HtmlInspectorMiddleware"
+] = 590
+
 ITEM_PIPELINES = {
     "moneyforward_pk.pipelines.JsonOutputPipeline": 300,
 }
