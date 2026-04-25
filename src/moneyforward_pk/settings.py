@@ -45,7 +45,7 @@ RANDOMIZE_DOWNLOAD_DELAY = True
 
 RETRY_ENABLED = True
 RETRY_TIMES = 4
-RETRY_HTTP_CODES = [500, 502, 503, 504, 520, 522, 524, 400, 408, 429]
+RETRY_HTTP_CODES = [500, 502, 503, 504, 520, 522, 524, 408, 429]
 
 # Playwright wiring
 DOWNLOAD_HANDLERS = {
@@ -71,7 +71,11 @@ DOWNLOADER_MIDDLEWARES = {
 }
 
 ITEM_PIPELINES = {
-    "moneyforward_pk.pipelines.DynamoDbPipeline": 300,
+    "moneyforward_pk.pipelines.JsonOutputPipeline": 300,
+}
+
+EXTENSIONS = {
+    "moneyforward_pk.extensions.slack_notifier_extension.SlackNotifierExtension": 500,
 }
 
 FEED_EXPORT_ENCODING = "utf-8"
@@ -80,12 +84,16 @@ FEED_EXPORT_ENCODING = "utf-8"
 SITE_LOGIN_USER = os.environ.get("SITE_LOGIN_USER", "")
 SITE_LOGIN_PASS = os.environ.get("SITE_LOGIN_PASS", "")
 SITE_LOGIN_ALT_USER = os.environ.get("SITE_LOGIN_ALT_USER", "")
+SITE_LOGIN_ALT_PASS = os.environ.get("SITE_LOGIN_ALT_PASS", "")
 SITE_PAST_MONTHS = int(os.environ.get("SITE_PAST_MONTHS", "12"))
 
-# DynamoDB
-DYNAMODB_TABLE_NAME = os.environ.get("DYNAMODB_TABLE_NAME", "")
-DYNAMODB_BATCH_N = int(os.environ.get("DYNAMODB_BATCH_N", "10"))
-DYNAMODB_PUT_DELAY = float(os.environ.get("DYNAMODB_PUT_DELAY", "3"))
+# JSON output (replaces the legacy DynamoDB pipeline; USER_DIRECTIVES)
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "")
+OUTPUT_DIR_DEFAULT = str(RUNTIME_DIR / "output")
+OUTPUT_FILENAME_TEMPLATE = os.environ.get(
+    "OUTPUT_FILENAME_TEMPLATE", "{spider}_{date:%Y%m%d}.jsonl"
+)
+OUTPUT_RETENTION_DAYS = int(os.environ.get("OUTPUT_RETENTION_DAYS", "14"))
 
 # Slack
 SLACK_INCOMING_WEBHOOK_URL = os.environ.get("SLACK_INCOMING_WEBHOOK_URL", "")
@@ -99,9 +107,5 @@ LOG_FILE_PATH = str(
         RUNTIME_DIR / "logs" / "moneyforward_pk.log",
     )
 )
-
-# Enable only pipeline when table name is set (avoid forcing AWS in dev/tests)
-if not DYNAMODB_TABLE_NAME:
-    ITEM_PIPELINES = {}
 
 REQUEST_FINGERPRINTER_IMPLEMENTATION = "2.7"

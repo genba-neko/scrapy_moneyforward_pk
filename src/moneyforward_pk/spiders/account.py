@@ -91,4 +91,7 @@ class MfAccountSpider(MoneyforwardBase):
                 await buttons.nth(idx).click(timeout=5_000)
                 await page.wait_for_timeout(1_000)
             except Exception as exc:  # noqa: BLE001
+                # Promote silent debug to a stats counter so operators can see
+                # transient update-button failures without DEBUG-level logs.
                 self.logger.debug("Update button %d click failed: %s", idx, exc)
+                self._inc_stat(f"{self.name}/update_button_click_failed")

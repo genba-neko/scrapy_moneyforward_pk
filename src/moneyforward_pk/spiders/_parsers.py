@@ -1,7 +1,7 @@
 """Pure HTML → Item parsers. Kept out of spider classes for unit testing.
 
 Selectors are ported verbatim from the legacy scrapy_moneyforward project so
-the shape of DynamoDB records is preserved.
+the JSON Lines record shape stays identical to the legacy DynamoDB schema.
 """
 
 from __future__ import annotations
@@ -19,16 +19,33 @@ from moneyforward_pk.items import (
     MoneyforwardTransactionItem,
 )
 
-_DATE_SORT_RE = re.compile(r"(\d+)/(\d+)/(\d+)-\d+")
+_DATE_SORT_RE = re.compile(r"(\d{4})/(\d+)/(\d+)-\d+")
 _ACCOUNT_TRIM_RE = re.compile(r"^(.+?)\(本サイト\).*")
 
 
 def parse_transactions(
     response: Response, year: int, month: int
 ) -> Iterator[MoneyforwardTransactionItem]:
-    """Yield transaction items from a /cf monthly page."""
+    """Yield transaction items from a /cf monthly page.
+
+    Notes
+    -----
+    The legacy MoneyForward markup applies ``class="transaction_list"`` to the
+    ``<tr>`` rows directly. Some captures wrap rows in a parent element bearing
+    that class. Both shapes are accepted via the union selector below; rows are
+    de-duplicated by Selector identity to avoid double yields when a single row
+    matches both legs.
+    """
     year_month = f"{year:04d}{month:02d}"
-    for row in response.css(".transaction_list tr"):
+    seen_ids: set[int] = set()
+    rows = list(response.css("tr.transaction_list")) + list(
+        response.css(".transaction_list tr")
+    )
+    for row in rows:
+        row_id = id(row.root)
+        if row_id in seen_ids:
+            continue
+        seen_ids.add(row_id)
         sort_value = row.css("td.date::attr(data-table-sortable-value)").get()
         if not sort_value:
             continue
@@ -37,7 +54,11 @@ def parse_transactions(
             continue
         y, mo, d = (int(g) for g in m.groups())
 
-        is_active = bool(row.css(".target-active"))
+        # Restrict to the row itself: legacy markup applies the
+        # ``target-active`` class to the <tr>, never to nested children.
+        # Using a descendant selector here previously misclassified rows
+        # whose nested controls happened to carry the same class.
+        is_active = "target-active" in (row.attrib.get("class") or "")
         date_text = row.css("td.date span::text").get(default="").strip()
         content = row.css("td.content span::text").get(default="").strip()
         amount_view = row.css("td.amount span::text").get(default="").strip()
@@ -91,15 +112,19 @@ def _extract_account_cells(row) -> tuple[str, str, str]:
         detail = auto.css("::attr(data-original-title)").get(default="").strip()
         return account, "", detail
 
-    transfer_cells = row.css('td.calc:not([data-original-title=""])')
-    if transfer_cells:
-        cell = transfer_cells[0]
+    # Take all td.calc cells and filter out ones whose data-original-title is
+    # empty in Python. The :not([data-original-title=""]) CSS form was brittle
+    # because cells without the attribute at all were also excluded; the
+    # explicit Python filter accepts both shapes.
+    for cell in row.css("td.calc"):
+        detail = cell.css("::attr(data-original-title)").get(default="").strip()
+        if not detail:
+            continue
         account = (
             cell.css(".transfer_account_box_02 a::text").get()
             or cell.css("::text").get(default="")
         ).strip()
         transfer = cell.css(".transfer_account_box::text").get(default="").strip()
-        detail = cell.css("::attr(data-original-title)").get(default="").strip()
         return account, transfer, detail
 
     return "", "", ""
@@ -112,10 +137,13 @@ def parse_asset_allocation(
     today = today or date.today()
     year_month_day = today.strftime("%Y%m%d")
 
-    table = response.css("table").xpath(".")
-    if not table:
+    # Legacy spec: only the first <table> on /bs/portfolio carries asset rows.
+    # Subsequent tables are summary/footer markup that must not leak through.
+    tables = response.css("table")
+    if not tables:
         return
-    for row in response.css("table").xpath(".//tr"):
+    first_table = tables[0]
+    for row in first_table.xpath(".//tr"):
         asset_name = row.css("th a::text").get()
         if not asset_name:
             continue
@@ -151,8 +179,11 @@ def parse_accounts(
     today = today or date.today()
     year_month_day = today.strftime("%Y%m%d")
 
+    # Locate the account table by its header label and walk one ancestor::tr
+    # rather than two ``parent::node()`` hops. Single ``ancestor::tr[1]`` is
+    # robust to extra wrapper nodes (legacy markup wrapped <th> in <span>).
     table_rows = response.xpath(
-        '//th[contains(text(), "金融機関")]/parent::node()/parent::node()//tr'
+        '//th[contains(text(), "金融機関")]/ancestor::tr[1]/ancestor::table[1]//tr'
     )
     items: list[MoneyforwardAccountItem] = []
     is_updating = False

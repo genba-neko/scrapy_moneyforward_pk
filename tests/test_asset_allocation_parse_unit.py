@@ -23,6 +23,26 @@ FIXTURE_HTML = """
 """
 
 
+# Two tables: the legacy parser must restrict itself to the first one, so
+# rows in the trailing summary table must NOT leak into the iterator.
+SECOND_TABLE_FIXTURE = """
+<html><body>
+<table>
+  <tr>
+    <th><a href="/bs/portfolio#portfolio_det_depo">預金・現金・仮想通貨</a></th>
+    <td>246,151円</td>
+  </tr>
+</table>
+<table>
+  <tr>
+    <th><a href="/bs/portfolio#portfolio_det_unwanted">合計サマリ</a></th>
+    <td>1,000,000円</td>
+  </tr>
+</table>
+</body></html>
+"""
+
+
 def test_parse_asset_allocation_basic():
     response = make_response(FIXTURE_HTML)
     fixed = date(2025, 1, 15)
@@ -57,3 +77,16 @@ def test_parse_asset_allocation_empty():
         )
     )
     assert items == []
+
+
+def test_parse_asset_allocation_first_table_only():
+    """iter2 T1: parser walks only the first <table>; trailing summaries skipped."""
+    response = make_response(SECOND_TABLE_FIXTURE)
+    items = list(
+        parse_asset_allocation(
+            response, "mf_asset_allocation", "u", today=date(2025, 1, 1)
+        )
+    )
+    asset_types = [it["asset_type"] for it in items]
+    assert asset_types == ["portfolio_det_depo"]
+    assert "portfolio_det_unwanted" not in asset_types

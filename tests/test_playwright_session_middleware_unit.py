@@ -47,17 +47,66 @@ def test_passes_through_healthy_response():
 def test_retries_on_login_url():
     mw = PlaywrightSessionMiddleware(login_max_retry=2)
     stats: dict = {}
+    spider = _spider(stats)
+    # Spider lacks handle_force_login → middleware returns the plain retry.
+    spider.handle_force_login = None
     req = _request()
     resp = HtmlResponse(
         url="https://moneyforward.com/sign_in",
         body="<html><head><title>ログイン</title></head></html>".encode("utf-8"),
         request=req,
     )
-    out = mw.process_response(req, resp, _spider(stats))
+    out = mw.process_response(req, resp, spider)
     assert isinstance(out, Request)
     assert out.meta["login_retry_times"] == 1
     assert out.meta["moneyforward_force_login"] is True
     assert stats["mf_test/session/retry"] == 1
+
+
+def test_retry_drops_stale_playwright_page_meta():
+    """Defect C2: request.copy() must not leak the closed page handle."""
+    mw = PlaywrightSessionMiddleware(login_max_retry=2)
+    stale_page = MagicMock(name="closed_page")
+    req = Request(
+        url="https://moneyforward.com/cf",
+        meta={
+            "playwright": True,
+            "playwright_page": stale_page,
+            "playwright_page_methods": ["m1", "m2"],
+            "login_retry_times": 0,
+        },
+    )
+    resp = HtmlResponse(
+        url="https://moneyforward.com/sign_in",
+        body=b"<html></html>",
+        request=req,
+    )
+    spider = _spider({})
+    spider.handle_force_login = None
+    out = mw.process_response(req, resp, spider)
+    assert isinstance(out, Request)
+    assert "playwright_page" not in out.meta
+    assert "playwright_page_methods" not in out.meta
+
+
+def test_retry_invokes_handle_force_login():
+    """Defect C1: middleware delegates to spider.handle_force_login when present."""
+    mw = PlaywrightSessionMiddleware(login_max_retry=2)
+    spider = _spider({})
+    sentinel = Request(url="https://moneyforward.com/login")
+    spider.handle_force_login = MagicMock(return_value=sentinel)
+
+    req = _request()
+    resp = HtmlResponse(
+        url="https://moneyforward.com/sign_in",
+        body=b"<html></html>",
+        request=req,
+    )
+    out = mw.process_response(req, resp, spider)
+    assert out is sentinel
+    spider.handle_force_login.assert_called_once()
+    forwarded = spider.handle_force_login.call_args.args[0]
+    assert forwarded.meta["moneyforward_force_login"] is True
 
 
 def test_stops_after_max_retry():
@@ -72,3 +121,28 @@ def test_stops_after_max_retry():
     out = mw.process_response(req, resp, _spider(stats))
     assert out is resp
     assert stats["mf_test/session/expired_final"] == 1
+
+
+def test_from_crawler_uses_settings_login_max_retry():
+    """from_crawler reads MONEYFORWARD_LOGIN_MAX_RETRY (default 2)."""
+    crawler = MagicMock()
+    crawler.settings.getint.return_value = 5
+    mw = PlaywrightSessionMiddleware.from_crawler(crawler)
+    assert mw.login_max_retry == 5
+    crawler.settings.getint.assert_called_with("MONEYFORWARD_LOGIN_MAX_RETRY", 2)
+
+
+def test_retry_final_does_not_invoke_handle_force_login():
+    """When attempts >= max, the middleware must NOT route to handle_force_login."""
+    mw = PlaywrightSessionMiddleware(login_max_retry=1)
+    spider = _spider({})
+    spider.handle_force_login = MagicMock()
+    req = _request(attempts=1)
+    resp = HtmlResponse(
+        url="https://moneyforward.com/sign_in",
+        body=b"<html></html>",
+        request=req,
+    )
+    out = mw.process_response(req, resp, spider)
+    assert out is resp
+    spider.handle_force_login.assert_not_called()

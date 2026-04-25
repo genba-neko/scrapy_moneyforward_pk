@@ -1,0 +1,30 @@
+name: Scrapy Nightly Smoke
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 18:00 UTC = 03:00 JST. Daily smoke that the spider modules still load.
+    - cron: '0 18 * * *'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Workbench is a private submodule outside this project's scope.
+          # The smoke job only needs the in-repo sources to verify that
+          # ``scrapy list`` resolves all spiders.
+          submodules: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - name: scrapy list (smoke)
+        working-directory: src
+        env:
+          # Empty credentials are fine for the import-time spider discovery
+          # path that ``scrapy list`` exercises.
+          SITE_LOGIN_USER: ""
+          SITE_LOGIN_PASS: ""
+        run: python -m scrapy list
