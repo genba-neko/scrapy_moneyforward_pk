@@ -112,15 +112,19 @@ def _extract_account_cells(row) -> tuple[str, str, str]:
         detail = auto.css("::attr(data-original-title)").get(default="").strip()
         return account, "", detail
 
-    transfer_cells = row.css('td.calc:not([data-original-title=""])')
-    if transfer_cells:
-        cell = transfer_cells[0]
+    # Take all td.calc cells and filter out ones whose data-original-title is
+    # empty in Python. The :not([data-original-title=""]) CSS form was brittle
+    # because cells without the attribute at all were also excluded; the
+    # explicit Python filter accepts both shapes.
+    for cell in row.css("td.calc"):
+        detail = cell.css("::attr(data-original-title)").get(default="").strip()
+        if not detail:
+            continue
         account = (
             cell.css(".transfer_account_box_02 a::text").get()
             or cell.css("::text").get(default="")
         ).strip()
         transfer = cell.css(".transfer_account_box::text").get(default="").strip()
-        detail = cell.css("::attr(data-original-title)").get(default="").strip()
         return account, transfer, detail
 
     return "", "", ""
@@ -175,8 +179,11 @@ def parse_accounts(
     today = today or date.today()
     year_month_day = today.strftime("%Y%m%d")
 
+    # Locate the account table by its header label and walk one ancestor::tr
+    # rather than two ``parent::node()`` hops. Single ``ancestor::tr[1]`` is
+    # robust to extra wrapper nodes (legacy markup wrapped <th> in <span>).
     table_rows = response.xpath(
-        '//th[contains(text(), "金融機関")]/parent::node()/parent::node()//tr'
+        '//th[contains(text(), "金融機関")]/ancestor::tr[1]/ancestor::table[1]//tr'
     )
     items: list[MoneyforwardAccountItem] = []
     is_updating = False

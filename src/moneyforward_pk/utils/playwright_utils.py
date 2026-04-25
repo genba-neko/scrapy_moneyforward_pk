@@ -41,17 +41,26 @@ def build_playwright_meta(
     return meta
 
 
+async def close_page_quietly(page) -> None:
+    """Unroute and close a Playwright page, swallowing teardown exceptions.
+
+    Shared by ``managed_page`` (callback path) and the errback close path so
+    both code paths converge on the same teardown order.
+    """
+    try:
+        await page.unroute("**/*")
+    except Exception:  # noqa: BLE001, S110
+        pass
+    try:
+        await page.close()
+    except Exception:  # noqa: BLE001, S110
+        pass
+
+
 @asynccontextmanager
 async def managed_page(page):
     """Ensure a Playwright page is unrouted + closed when a callback exits."""
     try:
         yield page
     finally:
-        try:
-            await page.unroute("**/*")
-        except Exception:  # noqa: BLE001, S110
-            pass
-        try:
-            await page.close()
-        except Exception:  # noqa: BLE001, S110
-            pass
+        await close_page_quietly(page)

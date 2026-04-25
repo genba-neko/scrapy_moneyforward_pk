@@ -23,6 +23,7 @@ from scrapy_playwright.page import PageMethod
 from moneyforward_pk.utils.logging_config import setup_common_logging
 from moneyforward_pk.utils.playwright_utils import (
     build_playwright_meta,
+    close_page_quietly,
     managed_page,
 )
 from moneyforward_pk.utils.session_utils import is_session_expired
@@ -274,17 +275,22 @@ class MoneyforwardBase(scrapy.Spider):
     # ---------------------------------------------------------------- errbacks
 
     def errback_playwright(self, failure) -> None:
+        """Close the Playwright page on download failure.
+
+        Pops ``playwright_page`` from meta so ``managed_page`` (callback path)
+        cannot double-close. Routes the actual teardown through
+        ``close_page_quietly`` so callback and errback paths share the
+        unroute → close sequence (single close strategy).
+        """
         self.logger.error("Playwright request failed: %s", failure)
         self._inc_stat(f"{self.name}/playwright/errback")
-        # Pop instead of get: prevents managed_page from closing the same
-        # page later if the failure originated mid-callback.
         page = failure.request.meta.pop("playwright_page", None)
         if page is None:
             return
         try:
             import asyncio
 
-            close_coro = page.close()
+            close_coro = close_page_quietly(page)
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:

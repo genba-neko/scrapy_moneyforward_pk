@@ -90,7 +90,7 @@ def test_resolve_output_dir_uses_default_when_blank():
     assert resolved == default.resolve()
 
 
-def test_resolve_output_dir_accepts_relative_under_project(tmp_path: Path, monkeypatch):
+def test_resolve_output_dir_accepts_relative_under_project(tmp_path: Path):
     relative = "runtime/output/sub"
     resolved = resolve_output_dir(relative, default=PROJECT_ROOT / "runtime" / "output")
     assert resolved.is_relative_to(PROJECT_ROOT.resolve())
@@ -116,7 +116,7 @@ def test_ensure_unique_path_rotates(tmp_path: Path):
     assert rotated2.name == "x-2.jsonl"
 
 
-def test_from_crawler_uses_settings(tmp_path: Path, monkeypatch):
+def test_from_crawler_uses_settings(tmp_path: Path):
     crawler = MagicMock()
     # Force the resolved path under PROJECT_ROOT by using a path inside it.
     test_dir = PROJECT_ROOT / "runtime" / "output_test"

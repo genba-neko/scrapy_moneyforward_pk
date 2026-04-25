@@ -57,6 +57,7 @@ def test_errback_playwright_pops_page_meta():
     """errback must pop (not get) so managed_page cannot double-close."""
     spider = _build_spider()
     page = MagicMock()
+    page.unroute = MagicMock(return_value=_NoopAwaitable())
     page.close = MagicMock(return_value=_NoopAwaitable())
     failed_request = Request(
         url="https://moneyforward.com/cf",
@@ -209,18 +210,14 @@ def test_iter_after_login_handles_none_return():
 
 
 def test_errback_playwright_uses_get_running_loop_outside_loop():
-    """iter2 T2: sync test path (no running loop) closes coro instead of raising."""
+    """iter2 T2 / iter3 T2: sync test path (no running loop) closes the
+    teardown coroutine instead of raising. After unifying on
+    ``close_page_quietly`` the helper coroutine is the one we close;
+    asserting no exception leaks is the contract."""
     spider = _build_spider()
-
-    class _CoroLike:
-        closed = False
-
-        def close(self) -> None:
-            self.closed = True
-
-    coro = _CoroLike()
     page = MagicMock()
-    page.close = MagicMock(return_value=coro)
+    page.unroute = MagicMock(return_value=_NoopAwaitable())
+    page.close = MagicMock(return_value=_NoopAwaitable())
     failed_request = Request(
         url="https://moneyforward.com/cf",
         meta={"playwright_page": page},
@@ -228,5 +225,6 @@ def test_errback_playwright_uses_get_running_loop_outside_loop():
     failure = MagicMock()
     failure.request = failed_request
 
+    # Must not raise even though no event loop is running.
     spider.errback_playwright(failure)
-    assert coro.closed is True
+    assert "playwright_page" not in failed_request.meta
