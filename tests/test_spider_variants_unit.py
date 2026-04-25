@@ -59,3 +59,32 @@ def test_xmf_ssnb_spider_inherits_login_mixin_and_base():
     assert issubclass(XmfSsnbTransactionSpider, MfTransactionSpider)
     assert issubclass(XmfSsnbTransactionSpider, MoneyforwardBase)
     assert issubclass(XmfSsnbTransactionSpider, XMoneyforwardLoginMixin)
+
+
+def test_mf_transaction_spider_uses_variant_url():
+    """``MfTransactionSpider`` は variant.transactions_url を request URL に使う."""
+    from moneyforward_pk.spiders.transaction import MfTransactionSpider
+
+    spider = MfTransactionSpider()
+    req = spider._month_request(2025, 1)
+    assert req.url == "https://moneyforward.com/cf"
+    assert spider.allowed_domains == ["moneyforward.com"]
+
+
+def test_mf_account_spider_uses_variant_url():
+    """``MfAccountSpider`` は variant.accounts_url を request URL に使う."""
+    from moneyforward_pk.spiders.account import MfAccountSpider
+
+    spider = MfAccountSpider()
+    req = spider._accounts_request(is_update=False, attempt=0)
+    assert req.url == "https://moneyforward.com/accounts"
+    assert spider.allowed_domains == ["moneyforward.com"]
+
+
+def test_xmf_ssnb_transaction_uses_partner_url():
+    """xmf_ssnb spider は ssnb.x.moneyforward.com 配下の URL を発行する."""
+    spider = XmfSsnbTransactionSpider()
+    req = spider._month_request(2025, 1)
+    assert req.url == "https://ssnb.x.moneyforward.com/cf"
+    assert spider.allowed_domains == ["ssnb.x.moneyforward.com"]
+    assert spider.start_url == "https://ssnb.x.moneyforward.com/"

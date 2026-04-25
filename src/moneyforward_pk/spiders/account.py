@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import AsyncIterator
+from urllib.parse import urlparse
 
 import scrapy
 from scrapy.http import Response
@@ -16,23 +17,26 @@ from moneyforward_pk.utils.playwright_utils import (
     managed_page,
 )
 
-ACCOUNTS_URL = "https://moneyforward.com/accounts"
-
 
 class MfAccountSpider(MoneyforwardBase):
     """Visit /accounts, trigger updates, poll until no 更新中 remain."""
 
     name = "mf_account"
-    allowed_domains = ["moneyforward.com"]
+    variant_name = "mf"
     update_wait_seconds = 20
     update_max_retry = 5
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # variant の base_url から allowed_domains を動的決定 (派生サイト対応).
+        self.allowed_domains = [urlparse(self.variant.base_url).netloc]
 
     async def after_login(self, response: Response) -> AsyncIterator[scrapy.Request]:  # type: ignore[override]
         yield self._accounts_request(is_update=True, attempt=0)
 
     def _accounts_request(self, *, is_update: bool, attempt: int) -> scrapy.Request:
         return scrapy.Request(
-            url=ACCOUNTS_URL,
+            url=self.variant.accounts_url,
             callback=self.parse_accounts_page,
             errback=self.errback_playwright,
             cb_kwargs={"is_update": is_update, "attempt": attempt},

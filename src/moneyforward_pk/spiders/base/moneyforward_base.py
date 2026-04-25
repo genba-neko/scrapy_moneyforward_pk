@@ -20,6 +20,7 @@ import scrapy
 from scrapy.http import Response
 from scrapy_playwright.page import PageMethod
 
+from moneyforward_pk.spiders.variants import VariantConfig, get_variant
 from moneyforward_pk.utils.logging_config import setup_common_logging
 from moneyforward_pk.utils.playwright_utils import (
     build_playwright_meta,
@@ -32,8 +33,16 @@ logger = logging.getLogger(__name__)
 
 
 class MoneyforwardBase(scrapy.Spider):
-    """Common foundation. Handles login + errback."""
+    """Common foundation. Handles login + errback.
 
+    Subclasses declare ``variant_name`` (registry key in ``VARIANTS``) and the
+    base resolves ``self.variant`` so URL / login-form selectors come from the
+    declarative registry rather than hardcoded module constants.
+    """
+
+    # variant_name のデフォルトは "mf" (既存 mf_* スパイダー互換).
+    variant_name: str = "mf"
+    # start_url / is_partner_portal は variant から動的に上書きされる.
     start_url: str = "https://moneyforward.com/"
     is_partner_portal: bool = False
     login_timeout_ms: int = 60_000
@@ -46,6 +55,11 @@ class MoneyforwardBase(scrapy.Spider):
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
+        # variant 解決: クラス属性 ``variant_name`` をキーに registry を引く.
+        self.variant: VariantConfig = get_variant(self.variant_name)
+        # variant の値で start_url / is_partner_portal を上書き.
+        self.start_url = self.variant.base_url
+        self.is_partner_portal = self.variant.is_partner_portal
         self.login_user = login_user
         self.login_pass = login_pass
         # Optional alternative credential pair for fallback when the primary
@@ -201,14 +215,16 @@ class MoneyforwardBase(scrapy.Spider):
             await email_link.click(timeout=timeout)
             await page.wait_for_load_state("domcontentloaded", timeout=timeout)
 
-        # Step 1: email
-        await page.fill('input[name="mfid_user[email]"]', user)
+        # Step 1: email (variant の form name を使う)
+        email_field = self.variant.login_form_email
+        password_field = self.variant.login_form_password
+        await page.fill(f'input[name="{email_field}"]', user)
         await page.click('button[type="submit"], input[type="submit"]')
         await page.wait_for_load_state("domcontentloaded", timeout=timeout)
 
         # Step 2: password (presented on a separate page)
         await page.fill(
-            'input[name="mfid_user[password]"], input[type="password"]',
+            f'input[name="{password_field}"], input[type="password"]',
             password,
         )
         await page.click('button[type="submit"], input[type="submit"]')
@@ -319,13 +335,22 @@ class XMoneyforwardLoginMixin:
             login_user = getattr(self, "login_user", "") or ""
             login_pass = getattr(self, "login_pass", "") or ""
 
+        # variant の form name を使う (派生サイト共通: sign_in_session_service).
+        variant = getattr(self, "variant", None)
+        if variant is not None:
+            email_field = variant.login_form_email
+            password_field = variant.login_form_password
+        else:
+            email_field = "sign_in_session_service[email]"
+            password_field = "sign_in_session_service[password]"  # noqa: S105
+
         await page.wait_for_load_state("domcontentloaded", timeout=timeout)
         entry = page.locator('a[href="/users/sign_in"]').first
         if await entry.count() > 0:
             await entry.click(timeout=timeout)
             await page.wait_for_load_state("domcontentloaded", timeout=timeout)
 
-        await page.fill('input[name="sign_in_session_service[email]"]', login_user)
-        await page.fill('input[name="sign_in_session_service[password]"]', login_pass)
+        await page.fill(f'input[name="{email_field}"]', login_user)
+        await page.fill(f'input[name="{password_field}"]', login_pass)
         await page.click('button[type="submit"], input[type="submit"]')
         await page.wait_for_load_state("networkidle", timeout=timeout)

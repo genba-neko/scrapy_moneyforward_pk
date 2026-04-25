@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from typing import AsyncIterator
+from urllib.parse import urlparse
 
 import scrapy
 from dateutil.relativedelta import relativedelta
@@ -17,8 +18,6 @@ from moneyforward_pk.utils.playwright_utils import (
     managed_page,
 )
 
-TRANSACTION_URL = "https://moneyforward.com/cf"
-
 
 class MfTransactionSpider(MoneyforwardBase):
     """Fetch past-N-months transactions.
@@ -27,11 +26,13 @@ class MfTransactionSpider(MoneyforwardBase):
     """
 
     name = "mf_transaction"
-    allowed_domains = ["moneyforward.com"]
+    variant_name = "mf"
 
     def __init__(self, *args, past_months: int | str | None = None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.past_months = int(past_months) if past_months is not None else None
+        # variant の base_url から allowed_domains を動的決定 (派生サイト対応).
+        self.allowed_domains = [urlparse(self.variant.base_url).netloc]
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
@@ -49,7 +50,7 @@ class MfTransactionSpider(MoneyforwardBase):
 
     def _month_request(self, year: int, month: int) -> scrapy.Request:
         return scrapy.Request(
-            url=TRANSACTION_URL,
+            url=self.variant.transactions_url,
             callback=self.parse_month,
             errback=self.errback_playwright,
             cb_kwargs={"year": year, "month": month},

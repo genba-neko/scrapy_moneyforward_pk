@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import AsyncIterator
+from urllib.parse import urlparse
 
 import scrapy
 from scrapy.http import Response
@@ -15,16 +16,21 @@ from moneyforward_pk.utils.playwright_utils import (
     managed_page,
 )
 
-PORTFOLIO_URL = "https://moneyforward.com/bs/portfolio"
-
 
 class MfAssetAllocationSpider(MoneyforwardBase):
+    """Visit /bs/portfolio and parse asset-allocation rows."""
+
     name = "mf_asset_allocation"
-    allowed_domains = ["moneyforward.com"]
+    variant_name = "mf"
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # variant の base_url から allowed_domains を動的決定 (派生サイト対応).
+        self.allowed_domains = [urlparse(self.variant.base_url).netloc]
 
     async def after_login(self, response: Response) -> AsyncIterator[scrapy.Request]:  # type: ignore[override]
         yield scrapy.Request(
-            url=PORTFOLIO_URL,
+            url=self.variant.asset_allocation_url,
             callback=self.parse_portfolio,
             errback=self.errback_playwright,
             dont_filter=True,
