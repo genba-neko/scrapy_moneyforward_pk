@@ -34,6 +34,28 @@ FIXTURE_HTML = """
 """
 
 
+TRANSFER_FIXTURE_HTML = """
+<html><body>
+<table>
+  <tbody class="transaction_list">
+    <tr>
+      <td class="date" data-table-sortable-value="2025/01/17-555"><span>01/17</span></td>
+      <td class="content"><span>口座間振替</span></td>
+      <td class="amount"><span>-50,000</span></td>
+      <td class="calc" data-original-title="振替詳細">
+        <div class="transfer_account_box">→</div>
+        <div class="transfer_account_box_02"><a>みずほ普通</a></div>
+      </td>
+      <td class="lctg"><a>振替</a></td>
+      <td class="mctg"><a></a></td>
+      <td class="memo"><span></span></td>
+    </tr>
+  </tbody>
+</table>
+</body></html>
+"""
+
+
 def test_parse_transactions_manual_and_auto():
     response = make_response(FIXTURE_HTML)
     items = list(parse_transactions(response, 2025, 1))
@@ -62,3 +84,14 @@ def test_parse_transactions_skips_rows_without_date():
         '<table><tr class="transaction_list"><tr><td>x</td></tr></tr></table>'
     )
     assert list(parse_transactions(response, 2025, 1)) == []
+
+
+def test_parse_transactions_extracts_transfer_branch():
+    """_extract_account_cells: td.calc with non-empty data-original-title."""
+    response = make_response(TRANSFER_FIXTURE_HTML)
+    items = list(parse_transactions(response, 2025, 1))
+    assert len(items) == 1
+    transfer = items[0]
+    assert transfer["amount_number"] == -50_000
+    assert transfer["transaction_account"] == "みずほ普通"
+    assert transfer["transaction_detail"] == "振替詳細"
