@@ -171,6 +171,18 @@ scrapy_moneyforward_pk/
 Request 化し、ログイン成功後に元の Request を再生する。再認証が
 発生したら stats counter `<spider>/login/forced` が 1 加算される。
 
+### アカウント切替 (`SITE_LOGIN_ALT_USER`)
+
+`SITE_LOGIN_ALT_USER` / `SITE_LOGIN_ALT_PASS` を `.env` に両方設定すると、
+`PlaywrightSessionMiddleware` が再試行を発火させた際 (login_retry_times >= 1)
+に `MoneyforwardBase._resolve_credentials` が代替アカウントへ自動切替する。
+`alt_user_used` stats counter (`<spider>/login/alt_user_used`) が 1 加算される。
+
+- 一次ログイン (`login_attempt=0`) は常に `SITE_LOGIN_USER` / `SITE_LOGIN_PASS`
+- 再ログイン (`login_attempt>=1`) は alt が両方設定されているときのみ alt
+- alt が片方しか設定されていない場合は primary 維持 (regression なし)
+- 認証情報はログに出力されない (詳細は「セキュリティ」節)
+
 ## セキュリティ
 
 - `paths.resolve_output_dir` は `is_relative_to(PROJECT_ROOT)` で
@@ -178,10 +190,28 @@ Request 化し、ログイン成功後に元の Request を再生する。再認
   シンボリックリンクや `..` を含むパスは `Path.resolve` で吸収。
 - `paths.sanitize_spider_name` は `[A-Za-z0-9_-]` 以外を `_` に置換し、
   `..` や `/` を含むスパイダー名でも安全な出力ファイル名を生成する。
-- 認証情報 (`SITE_LOGIN_USER` / `SITE_LOGIN_PASS`) は `.env` から
-  load_dotenv で読み込まれ、コミット禁止 (`.gitignore` 推奨)。
-  `pytest` 実行時はモジュール import 時の load_dotenv をスキップして
-  シェル env が漏れないようにしている。
+- 認証情報 (`SITE_LOGIN_USER` / `SITE_LOGIN_PASS` / `SITE_LOGIN_ALT_USER` /
+  `SITE_LOGIN_ALT_PASS`) は `.env` から `load_dotenv` で読み込まれ、
+  コミット禁止 (`.gitignore` 推奨)。 `pytest` 実行時はモジュール import 時の
+  `load_dotenv` をスキップしてシェル env が漏れないようにしている。
+- **ログ redaction**: `utils/log_filter.SensitiveDataFilter` が `setup_common_logging`
+  で root / scrapy / project logger に attach され、以下を `[REDACTED]` に置換:
+  - URL クエリの `auth=` / `token=` / `access_token=` / `api_key=` 値
+  - `Cookie:` / `Set-Cookie:` ヘッダ
+  - `Authorization:` ヘッダ
+  - `password=` / `passwd=` / `pwd=` の kv 値
+  これにより `logger.exception` で URL / cookie / auth が混入しても
+  ログファイルに生では出ない。フィルタは idempotent で重複 attach されない。
+- **静的リソース blocklist**: `playwright_utils._BLOCK_RESOURCE_TYPES` は
+  `image` / `font` / `media` のみ block (CSS は layout-critical のため通す)。
+  分析・広告系 URL (`google-analytics`, `googletagmanager`, `hotjar`,
+  `doubleclick`, `facebook.com/tr`) は URL pattern allow-list で別途 block。
+
+### 出力ファイル ローテーションの fail-safe
+
+`JsonOutputPipeline._prune_stale` は同一 spider の古い jsonl 削除を試みる。
+ファイルがレース等で消えた場合 (`FileNotFoundError`) は黙って継続し、
+それ以外の `OSError` は警告ログのみで pipeline 自体は止めない。
 
 ## 改善余地
 
