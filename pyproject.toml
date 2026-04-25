@@ -3,11 +3,20 @@ line-length = 88
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "S", "B"]
-ignore = ["E501", "E402", "S105", "S108", "S110", "B905"]
+select = ["E", "F", "W", "I", "S", "B", "D"]
+ignore = [
+    "E501", "E402",
+    "S105", "S108", "S110",
+    "B905",
+    # 既存コードの missing docstring は後続イテレーションで解消する
+    "D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "S603"]  # assert/subprocess は pytest で許可
+"tests/**/*.py" = ["S101", "S603", "D"]  # テストは docstring 不要
 
 [tool.pyright]
 typeCheckingMode = "basic"
