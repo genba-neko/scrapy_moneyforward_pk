@@ -152,3 +152,29 @@ def test_click_update_buttons_handles_count_failure():
 
     # Must not raise.
     _drive(go())
+
+
+def test_click_update_buttons_records_failed_clicks_in_stats():
+    """iter3 T2: click() failures must increment update_button_click_failed."""
+    spider = MfAccountSpider()
+    crawler = MagicMock()
+    crawler.stats = MagicMock()
+    spider.crawler = crawler
+
+    page = MagicMock()
+    locator = MagicMock()
+    locator.count = AsyncMock(return_value=2)
+    btn = MagicMock()
+    btn.click = AsyncMock(side_effect=RuntimeError("click failed"))
+    locator.nth.return_value = btn
+    page.locator.return_value = locator
+    page.wait_for_timeout = AsyncMock()
+
+    async def go():
+        await spider._click_update_buttons(page)
+
+    _drive(go())
+    # Two buttons → two failed clicks → counter bumped twice.
+    calls = [c.args for c in crawler.stats.inc_value.call_args_list]
+    failed_calls = [c for c in calls if c[0].endswith("/update_button_click_failed")]
+    assert len(failed_calls) == 2

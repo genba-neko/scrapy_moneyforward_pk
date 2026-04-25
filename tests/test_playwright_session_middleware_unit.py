@@ -121,3 +121,28 @@ def test_stops_after_max_retry():
     out = mw.process_response(req, resp, _spider(stats))
     assert out is resp
     assert stats["mf_test/session/expired_final"] == 1
+
+
+def test_from_crawler_uses_settings_login_max_retry():
+    """from_crawler reads MONEYFORWARD_LOGIN_MAX_RETRY (default 2)."""
+    crawler = MagicMock()
+    crawler.settings.getint.return_value = 5
+    mw = PlaywrightSessionMiddleware.from_crawler(crawler)
+    assert mw.login_max_retry == 5
+    crawler.settings.getint.assert_called_with("MONEYFORWARD_LOGIN_MAX_RETRY", 2)
+
+
+def test_retry_final_does_not_invoke_handle_force_login():
+    """When attempts >= max, the middleware must NOT route to handle_force_login."""
+    mw = PlaywrightSessionMiddleware(login_max_retry=1)
+    spider = _spider({})
+    spider.handle_force_login = MagicMock()
+    req = _request(attempts=1)
+    resp = HtmlResponse(
+        url="https://moneyforward.com/sign_in",
+        body=b"<html></html>",
+        request=req,
+    )
+    out = mw.process_response(req, resp, spider)
+    assert out is resp
+    spider.handle_force_login.assert_not_called()
