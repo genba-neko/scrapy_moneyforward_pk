@@ -116,3 +116,82 @@ def test_filter_returns_true_to_keep_record():
     """The filter must always allow the record through (no dropping)."""
     record = _make_record("anything")
     assert SensitiveDataFilter().filter(record) is True
+
+
+def test_filter_redacts_session_query_param():
+    record = _make_record("GET https://api.example.com/x?session=opaque-sid&id=4")
+    rendered = _apply(record)
+    assert "opaque-sid" not in rendered
+    assert "[REDACTED]" in rendered
+    assert "id=4" in rendered
+
+
+def test_filter_redacts_refresh_token_query_param():
+    record = _make_record("GET https://api.example.com/x?refresh_token=rt-abc-123")
+    rendered = _apply(record)
+    assert "rt-abc-123" not in rendered
+    assert "[REDACTED]" in rendered
+
+
+def test_filter_redacts_aws_signed_url_params():
+    """AWS-SigV4 query params often appear in S3 presigned URL logs."""
+    record = _make_record(
+        "PUT https://x.s3.amazonaws.com/k?X-Amz-Signature=deadbeef&X-Amz-Credential=AKIA"
+    )
+    rendered = _apply(record)
+    assert "deadbeef" not in rendered
+    assert "AKIA" not in rendered
+    assert rendered.count("[REDACTED]") >= 2
+
+
+def test_filter_redacts_proxy_authorization_header():
+    record = _make_record("Proxy-Authorization: Basic dXNlcjpwYXNz")
+    rendered = _apply(record)
+    assert "dXNlcjpwYXNz" not in rendered
+    assert "[REDACTED]" in rendered
+
+
+def test_filter_redacts_x_api_key_header():
+    record = _make_record("X-Api-Key: mykey-abc-123")
+    rendered = _apply(record)
+    assert "mykey-abc-123" not in rendered
+    assert "[REDACTED]" in rendered
+
+
+def test_filter_redacts_csrf_token_header():
+    record = _make_record("X-CSRF-Token: token-xyz-789")
+    rendered = _apply(record)
+    assert "token-xyz-789" not in rendered
+    assert "[REDACTED]" in rendered
+
+
+def test_filter_redacts_json_password_value():
+    record = _make_record('{"username":"u","password":"hunter2","other":"keep"}')
+    rendered = _apply(record)
+    assert "hunter2" not in rendered
+    assert "[REDACTED]" in rendered
+    assert "keep" in rendered
+
+
+def test_filter_redacts_json_token_value():
+    record = _make_record('{"access_token":"jwt.payload.sig","kind":"Bearer"}')
+    rendered = _apply(record)
+    assert "jwt.payload.sig" not in rendered
+    assert "[REDACTED]" in rendered
+    # Non-sensitive sibling keys preserved.
+    assert "Bearer" in rendered
+
+
+def test_filter_redacts_otp_query_param():
+    record = _make_record("POST https://x/verify?otp=123456&user=alice")
+    rendered = _apply(record)
+    assert "123456" not in rendered
+    assert "[REDACTED]" in rendered
+    assert "user=alice" in rendered
+
+
+def test_filter_redacts_secret_kv():
+    record = _make_record("client_secret=abc-very-secret-xyz appended")
+    rendered = _apply(record)
+    assert "abc-very-secret-xyz" not in rendered
+    assert "[REDACTED]" in rendered
