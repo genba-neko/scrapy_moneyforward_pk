@@ -84,6 +84,7 @@ FEED_EXPORT_ENCODING = "utf-8"
 SITE_LOGIN_USER = os.environ.get("SITE_LOGIN_USER", "")
 SITE_LOGIN_PASS = os.environ.get("SITE_LOGIN_PASS", "")
 SITE_LOGIN_ALT_USER = os.environ.get("SITE_LOGIN_ALT_USER", "")
+SITE_LOGIN_ALT_PASS = os.environ.get("SITE_LOGIN_ALT_PASS", "")
 SITE_PAST_MONTHS = int(os.environ.get("SITE_PAST_MONTHS", "12"))
 
 # JSON output (replaces the legacy DynamoDB pipeline; USER_DIRECTIVES)

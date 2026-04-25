@@ -14,7 +14,7 @@ implemented in ``XMoneyforwardLoginMixin``.
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncIterator, Iterable
+from typing import Any, AsyncIterator, Iterable, cast
 
 import scrapy
 from scrapy.http import Response
@@ -47,6 +47,11 @@ class MoneyforwardBase(scrapy.Spider):
         super().__init__(*args, **kwargs)
         self.login_user = login_user
         self.login_pass = login_pass
+        # Optional alternative credential pair for fallback when the primary
+        # account is locked / temporarily refused. Loaded from settings in
+        # ``from_crawler`` and never logged. Empty strings disable the path.
+        self.login_alt_user: str = ""
+        self.login_alt_pass: str = ""
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
@@ -60,11 +65,38 @@ class MoneyforwardBase(scrapy.Spider):
             spider.login_user = settings.get("SITE_LOGIN_USER", "")
         if not spider.login_pass:
             spider.login_pass = settings.get("SITE_LOGIN_PASS", "")
+        # Alt credentials are env-only (do not allow CLI override to avoid
+        # leaking secrets via shell history).
+        spider.login_alt_user = settings.get("SITE_LOGIN_ALT_USER", "") or ""
+        spider.login_alt_pass = settings.get("SITE_LOGIN_ALT_PASS", "") or ""
         if not spider.login_user or not spider.login_pass:
             spider.logger.warning(
                 "SITE_LOGIN_USER / SITE_LOGIN_PASS not configured; login will fail."
             )
         return spider
+
+    # ----------------------------------------------------------- credentials
+
+    def _resolve_credentials(self, attempt: int) -> tuple[str, str]:
+        """Pick the credential pair for a given login attempt.
+
+        Parameters
+        ----------
+        attempt : int
+            Zero-based login attempt counter. ``0`` selects the primary
+            credentials. ``>= 1`` falls back to ``SITE_LOGIN_ALT_USER`` /
+            ``SITE_LOGIN_ALT_PASS`` when both are configured.
+
+        Returns
+        -------
+        tuple[str, str]
+            ``(user, password)`` to use for this attempt. Returns the primary
+            pair when alt credentials are unset so behavior is unchanged for
+            users who do not configure the alt path.
+        """
+        if attempt >= 1 and self.login_alt_user and self.login_alt_pass:
+            return self.login_alt_user, self.login_alt_pass
+        return (self.login_user or "", self.login_pass or "")
 
     # --------------------------------------------------------------- helpers
 
@@ -86,7 +118,10 @@ class MoneyforwardBase(scrapy.Spider):
         yield self._build_login_request()
 
     def _build_login_request(
-        self, *, follow_up: scrapy.Request | None = None
+        self,
+        *,
+        follow_up: scrapy.Request | None = None,
+        login_attempt: int = 0,
     ) -> scrapy.Request:
         meta = build_playwright_meta(
             include_page=True,
@@ -96,6 +131,7 @@ class MoneyforwardBase(scrapy.Spider):
         )
         if follow_up is not None:
             meta["moneyforward_follow_up"] = follow_up
+        meta["moneyforward_login_attempt"] = login_attempt
         return scrapy.Request(
             url=self.start_url,
             callback=self._parse_after_login,
@@ -117,18 +153,38 @@ class MoneyforwardBase(scrapy.Spider):
         -------
         scrapy.Request
             A new login request that, after ``login_flow`` succeeds, queues
-            ``retry_request`` via ``after_login``.
+            ``retry_request`` via ``after_login``. The login attempt counter
+            in ``retry_request.meta["login_retry_times"]`` is propagated to
+            ``moneyforward_login_attempt`` so the alt-credential fallback in
+            ``_resolve_credentials`` can engage on retries.
         """
         # Strip the consumed flag so the follow-up does not loop back here.
         retry_request.meta.pop("moneyforward_force_login", None)
+        # PlaywrightSessionMiddleware bumps login_retry_times before handing
+        # control here. Mirror that counter into the login request so
+        # ``login_flow`` can pick alt credentials when configured.
+        attempt = int(retry_request.meta.get("login_retry_times", 0))
         self._inc_stat(f"{self.name}/login/forced")
-        return self._build_login_request(follow_up=retry_request)
+        if attempt >= 1 and self.login_alt_user and self.login_alt_pass:
+            self._inc_stat(f"{self.name}/login/alt_user_used")
+        return self._build_login_request(follow_up=retry_request, login_attempt=attempt)
 
     # ---------------------------------------------------------------- login
 
-    async def login_flow(self, page) -> None:
-        """Drive the moneyforward.com login UI via Playwright."""
+    async def login_flow(self, page, *, login_attempt: int = 0) -> None:
+        """Drive the moneyforward.com login UI via Playwright.
+
+        Parameters
+        ----------
+        page : playwright.async_api.Page
+            Page handle delivered by scrapy-playwright.
+        login_attempt : int, optional
+            Zero-based login attempt counter. Forwarded to
+            ``_resolve_credentials`` so alt credentials can engage on
+            retries when configured.
+        """
         timeout = self.login_timeout_ms
+        user, password = self._resolve_credentials(login_attempt)
 
         await page.wait_for_load_state("domcontentloaded", timeout=timeout)
 
@@ -145,14 +201,14 @@ class MoneyforwardBase(scrapy.Spider):
             await page.wait_for_load_state("domcontentloaded", timeout=timeout)
 
         # Step 1: email
-        await page.fill('input[name="mfid_user[email]"]', self.login_user or "")
+        await page.fill('input[name="mfid_user[email]"]', user)
         await page.click('button[type="submit"], input[type="submit"]')
         await page.wait_for_load_state("domcontentloaded", timeout=timeout)
 
         # Step 2: password (presented on a separate page)
         await page.fill(
             'input[name="mfid_user[password]"], input[type="password"]',
-            self.login_pass or "",
+            password,
         )
         await page.click('button[type="submit"], input[type="submit"]')
         await page.wait_for_load_state("networkidle", timeout=timeout)
@@ -163,9 +219,11 @@ class MoneyforwardBase(scrapy.Spider):
             self.logger.error("No playwright_page attached to login response")
             return
 
+        login_attempt = int(response.meta.get("moneyforward_login_attempt", 0))
+
         async with managed_page(page) as p:
             try:
-                await self.login_flow(p)
+                await self.login_flow(p, login_attempt=login_attempt)
             except Exception as exc:  # noqa: BLE001
                 self.logger.exception("Login flow failed: %s", exc)
                 self._inc_stat(f"{self.name}/login/failed")
@@ -245,10 +303,15 @@ class MoneyforwardBase(scrapy.Spider):
 class XMoneyforwardLoginMixin:
     """Alternative login flow for ``*.x.moneyforward.com`` partner portals."""
 
-    async def login_flow(self, page) -> None:  # type: ignore[override]
+    async def login_flow(self, page, *, login_attempt: int = 0) -> None:  # type: ignore[override]
         timeout = getattr(self, "login_timeout_ms", 60_000)
-        login_user = getattr(self, "login_user", "") or ""
-        login_pass = getattr(self, "login_pass", "") or ""
+        resolver = getattr(self, "_resolve_credentials", None)
+        if callable(resolver):
+            resolved = cast("tuple[str, str]", resolver(login_attempt))
+            login_user, login_pass = resolved
+        else:
+            login_user = getattr(self, "login_user", "") or ""
+            login_pass = getattr(self, "login_pass", "") or ""
 
         await page.wait_for_load_state("domcontentloaded", timeout=timeout)
         entry = page.locator('a[href="/users/sign_in"]').first
