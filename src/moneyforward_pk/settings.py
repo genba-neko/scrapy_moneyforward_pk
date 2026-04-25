@@ -74,6 +74,10 @@ ITEM_PIPELINES = {
     "moneyforward_pk.pipelines.JsonOutputPipeline": 300,
 }
 
+EXTENSIONS = {
+    "moneyforward_pk.extensions.slack_notifier_extension.SlackNotifierExtension": 500,
+}
+
 FEED_EXPORT_ENCODING = "utf-8"
 
 # MoneyForward credentials / tunables
@@ -88,6 +92,7 @@ OUTPUT_DIR_DEFAULT = str(RUNTIME_DIR / "output")
 OUTPUT_FILENAME_TEMPLATE = os.environ.get(
     "OUTPUT_FILENAME_TEMPLATE", "{spider}_{date:%Y%m%d}.jsonl"
 )
+OUTPUT_RETENTION_DAYS = int(os.environ.get("OUTPUT_RETENTION_DAYS", "14"))
 
 # Slack
 SLACK_INCOMING_WEBHOOK_URL = os.environ.get("SLACK_INCOMING_WEBHOOK_URL", "")

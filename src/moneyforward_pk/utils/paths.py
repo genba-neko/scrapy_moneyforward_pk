@@ -3,10 +3,35 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import date
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+_SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9_-]")
+
+
+def sanitize_spider_name(name: str) -> str:
+    """Return a filename-safe rendering of ``name``.
+
+    Parameters
+    ----------
+    name : str
+        Raw spider name. May contain characters that would break filename
+        templating (``..``, path separators, NUL, etc.).
+
+    Returns
+    -------
+    str
+        ``name`` with every character outside ``[A-Za-z0-9_-]`` replaced by
+        ``_``. An empty result falls back to ``"spider"`` so downstream code
+        always receives a non-empty token.
+    """
+    if not name:
+        return "spider"
+    sanitized = _SAFE_NAME_RE.sub("_", name)
+    return sanitized or "spider"
 
 
 def resolve_output_dir(value: str | os.PathLike[str] | None, default: Path) -> Path:
@@ -69,7 +94,8 @@ def resolve_output_path(
         Absolute output file path under ``output_dir``.
     """
     today = today or date.today()
-    filename = template.format(spider=spider_name, date=today)
+    safe_spider = sanitize_spider_name(spider_name)
+    filename = template.format(spider=safe_spider, date=today)
     return output_dir / filename
 
 
