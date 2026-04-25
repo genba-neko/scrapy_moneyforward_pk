@@ -9,6 +9,7 @@ authentic markup. Loaders live in `tests/conftest.py` (`fixture_html`).
 | `mf_transaction_legacy.html` | `scrapy_moneyforward/tests/fixtures/cf.html` 相当 | `https://moneyforward.com/cf` (月別) | 2019-11 (data-table-sortable-value 由来) | `<tbody>` 配下の `<tr class="js-cf-edit-container target-active transaction_list">` 3 行のみ。フォーム/script/banner 等は削除済み |
 | `mf_asset_allocation_legacy.html` | `scrapy_moneyforward/tests/fixtures/portfolio.html` 相当 | `https://moneyforward.com/bs/portfolio` | 2025-01 ごろ | 1 番目の `<table class="table table-bordered">` のみ。サマリ/フッタ table は削除済み |
 | `mf_accounts_legacy.html` | `scrapy_moneyforward/tests/fixtures/accounts.html` 相当 | `https://moneyforward.com/accounts` | 2025-01 ごろ | 9 行の登録金融機関テーブル。js-status-sentence-span / js-hidden-status-sentence-span を維持 |
+| `xmf_ssnb_transaction_legacy.html` | `scrapy_moneyforward/data/source-transactions/マネーフォワード for 住信SBIネット銀行.html` | `https://ssnb.x.moneyforward.com/cf` | 2020-01 (data-table-sortable-value 由来) | 元 36 行から振替/自動入力/収入の 3 形態を 1 行ずつ抽出。口座番号・残高・振替先口座を架空値に置換、Shift_JIS 化けした日本語コメントを再翻訳。c3 iter2 取込 (2026-04-26) |
 
 ## スクラブ方針
 

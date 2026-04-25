@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!--
+  Anonymized fixture distilled from legacy
+  scrapy_moneyforward/data/source-transactions/マネーフォワード for 住信SBIネット銀行.html
+  (saved from https://ssnb.x.moneyforward.com/cf, 2020-01).
+  PII (account numbers, real merchant names, balances) replaced with placeholders.
+  Only the 3 transaction shape variants required by parse_transactions are kept:
+    1. transfer (`td.calc:not([data-original-title=""])` with both transfer accounts)
+    2. auto-input (`td.note.calc`)
+    3. transfer-out (same shape as 1, negative amount)
+-->
+<html>
+<head><meta charset="utf-8"></head>
+<body>
+<table>
+<tbody>
+<tr class="js-cf-edit-container mf-grayout transaction_list" id="js-transaction-1000000001">
+  <td class="calc" data-original-title="" title=""></td>
+  <td class="date" data-table-sortable-value="2020/01/27-001000000001">
+    <div><span>01/27</span></div>
+  </td>
+  <td class="content">
+    <div><span>振替送金</span></div>
+  </td>
+  <td class="amount number" title="">
+    <div>
+      <span class="offset">20000</span>
+      <div class="offset">(振替)</div>
+    </div>
+  </td>
+  <td class="calc" style="text-align: left;" title="" data-original-title="住信SBI銀行 普通預金 - 楽天銀行 への振替">
+    住信SBI銀行
+    <div class="transfer_account_box">楽天銀行</div>
+  </td>
+  <td class="lctg" data-original-title="" title=""></td>
+  <td class="mctg" data-original-title="" title=""></td>
+  <td class="memo form-switch-td"><div class="noform"><span></span></div></td>
+</tr>
+
+<tr class="js-cf-edit-container target-active transaction_list" id="js-transaction-1000000002">
+  <td class="calc" data-original-title="" title=""></td>
+  <td class="date" data-table-sortable-value="2020/01/27-001000000002">
+    <div><span>01/27</span></div>
+  </td>
+  <td class="content">
+    <div><span>カード支払</span></div>
+  </td>
+  <td class="amount minus-color number" title="">
+    <div>
+      <span class="offset">-9640</span>
+    </div>
+  </td>
+  <td class="note calc" style="text-align: left;" title="" data-original-title="楽天銀行 普通預金">楽天銀行</td>
+  <td class="lctg" data-original-title="" title="">
+    <div class="btn-group btn_l_ctg"><a class="btn btn-small dropdown-toggle v_l_ctg">
+      お金・カード
+    </a></div>
+  </td>
+  <td class="mctg" data-original-title="" title="">
+    <div class="btn-group btn_m_ctg"><a class="btn btn-small dropdown-toggle v_m_ctg">
+      カード引き落とし
+    </a></div>
+  </td>
+  <td class="memo form-switch-td"><div class="noform"><span></span></div></td>
+</tr>
+
+<tr class="js-cf-edit-container target-active transaction_list" id="js-transaction-1000000003">
+  <td class="calc" data-original-title="" title=""></td>
+  <td class="date" data-table-sortable-value="2020/01/15-001000000003">
+    <div><span>01/15</span></div>
+  </td>
+  <td class="content">
+    <div><span>給与振込</span></div>
+  </td>
+  <td class="amount number" title="">
+    <div>
+      <span class="offset">300000</span>
+    </div>
+  </td>
+  <td class="note calc" style="text-align: left;" title="" data-original-title="住信SBI銀行 給与振込">住信SBI銀行</td>
+  <td class="lctg" data-original-title="" title="">
+    <div class="btn-group btn_l_ctg"><a class="btn btn-small dropdown-toggle v_l_ctg">
+      収入
+    </a></div>
+  </td>
+  <td class="mctg" data-original-title="" title="">
+    <div class="btn-group btn_m_ctg"><a class="btn btn-small dropdown-toggle v_m_ctg">
+      給与
+    </a></div>
+  </td>
+  <td class="memo form-switch-td"><div class="noform"><span></span></div></td>
+</tr>
+
+</tbody>
+</table>
+</body>
+</html>
