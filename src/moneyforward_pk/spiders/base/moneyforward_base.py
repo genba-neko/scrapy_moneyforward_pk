@@ -83,19 +83,44 @@ class MoneyforwardBase(scrapy.Spider):
         """Back-compat for Scrapy versions that still call start_requests."""
         yield self._build_login_request()
 
-    def _build_login_request(self) -> scrapy.Request:
+    def _build_login_request(
+        self, *, follow_up: scrapy.Request | None = None
+    ) -> scrapy.Request:
+        meta = build_playwright_meta(
+            include_page=True,
+            page_methods=[
+                PageMethod("wait_for_load_state", "domcontentloaded"),
+            ],
+        )
+        if follow_up is not None:
+            meta["moneyforward_follow_up"] = follow_up
         return scrapy.Request(
             url=self.start_url,
             callback=self._parse_after_login,
             errback=self.errback_playwright,
             dont_filter=True,
-            meta=build_playwright_meta(
-                include_page=True,
-                page_methods=[
-                    PageMethod("wait_for_load_state", "domcontentloaded"),
-                ],
-            ),
+            meta=meta,
         )
+
+    def handle_force_login(self, retry_request: scrapy.Request) -> scrapy.Request:
+        """Wrap a session-expiry retry with a fresh login flow.
+
+        Parameters
+        ----------
+        retry_request : scrapy.Request
+            The request the middleware would otherwise re-download. Carries
+            ``meta["moneyforward_force_login"]`` set by the middleware.
+
+        Returns
+        -------
+        scrapy.Request
+            A new login request that, after ``login_flow`` succeeds, queues
+            ``retry_request`` via ``after_login``.
+        """
+        # Strip the consumed flag so the follow-up does not loop back here.
+        retry_request.meta.pop("moneyforward_force_login", None)
+        self._inc_stat(f"{self.name}/login/forced")
+        return self._build_login_request(follow_up=retry_request)
 
     # ---------------------------------------------------------------- login
 
@@ -159,6 +184,13 @@ class MoneyforwardBase(scrapy.Spider):
             return
 
         self._inc_stat(f"{self.name}/login/success")
+
+        follow_up = response.meta.get("moneyforward_follow_up")
+        if follow_up is not None:
+            self.logger.info("Replaying request after forced login: %s", follow_up.url)
+            yield follow_up
+            return
+
         async for item_or_request in self._iter_after_login(post_login):
             yield item_or_request
 
@@ -184,14 +216,26 @@ class MoneyforwardBase(scrapy.Spider):
     def errback_playwright(self, failure) -> None:
         self.logger.error("Playwright request failed: %s", failure)
         self._inc_stat(f"{self.name}/playwright/errback")
-        page = failure.request.meta.get("playwright_page")
-        if page is not None:
-            try:
-                import asyncio
+        # Pop instead of get: prevents managed_page from closing the same
+        # page later if the failure originated mid-callback.
+        page = failure.request.meta.pop("playwright_page", None)
+        if page is None:
+            return
+        try:
+            import asyncio
 
-                asyncio.ensure_future(page.close())
-            except Exception:  # noqa: BLE001, S110
-                pass
+            close_coro = page.close()
+            try:
+                loop = asyncio.get_event_loop()
+            except RuntimeError:
+                loop = None
+            if loop is not None and loop.is_running():
+                asyncio.ensure_future(close_coro)
+            else:
+                # No running loop (sync test path): drop the unawaited coro.
+                close_coro.close() if hasattr(close_coro, "close") else None
+        except Exception:  # noqa: BLE001, S110
+            pass
 
 
 class XMoneyforwardLoginMixin:

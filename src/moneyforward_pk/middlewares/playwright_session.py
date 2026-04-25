@@ -1,9 +1,8 @@
 """Downloader middleware that retries on detected login-expiry.
 
-If a Playwright response lands on a login page, re-issue the same request with
-a bumped ``login_retry_times`` counter. The base spider is responsible for
-re-logging in on the next cycle (Playwright context reuse keeps cookies, so a
-bounce normally means the session truly expired).
+If a Playwright response lands on a login page, route the request through the
+base spider's ``handle_force_login`` hook so the next download flushes any
+stale session and replays the login flow before retrying the original URL.
 """
 
 from __future__ import annotations
@@ -53,6 +52,18 @@ class PlaywrightSessionMiddleware:
 
         new_request = request.copy()
         new_request.dont_filter = True
+        # Drop stale Playwright handles inherited from request.copy(): the
+        # original page was already consumed/closed when the response landed,
+        # so reusing it would double-close via managed_page (defect C2).
+        new_request.meta.pop("playwright_page", None)
+        new_request.meta.pop("playwright_page_methods", None)
         new_request.meta["login_retry_times"] = attempts + 1
         new_request.meta["moneyforward_force_login"] = True
+
+        # Defect C1 fix: hand the retry to the spider so it can prepend a
+        # fresh login flow. Falls back to a plain retry if the spider does
+        # not implement the hook (non-MoneyforwardBase spiders).
+        handler = getattr(spider, "handle_force_login", None)
+        if callable(handler):
+            return handler(new_request)
         return new_request
