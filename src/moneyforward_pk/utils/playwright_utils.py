@@ -2,17 +2,42 @@
 
 from __future__ import annotations
 
+import re
 from contextlib import asynccontextmanager
 from typing import Any
 
 from scrapy_playwright.page import PageMethod
 
+# Resource types we always discard. ``stylesheet`` is intentionally absent:
+# MoneyForward injects layout-critical CSS at runtime and blocking it
+# breaks the DOM the parsers expect.
+_BLOCK_RESOURCE_TYPES = frozenset({"image", "font", "media"})
+
+# URL allow-list: requests whose URL matches any of these patterns are
+# blocked even when the resource_type is otherwise harmless. Used to drop
+# analytics / advertising endpoints that bloat captures and emit data
+# outside our trust boundary.
+_BLOCK_URL_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"google-analytics\.com", re.IGNORECASE),
+    re.compile(r"googletagmanager\.com", re.IGNORECASE),
+    re.compile(r"hotjar\.com", re.IGNORECASE),
+    re.compile(r"doubleclick\.net", re.IGNORECASE),
+    re.compile(r"facebook\.(com|net)/tr", re.IGNORECASE),
+)
+
+
+def _should_block(resource_type: str, url: str) -> bool:
+    """Return True when the request should be aborted by ``init_page_block_static``."""
+    if resource_type in _BLOCK_RESOURCE_TYPES:
+        return True
+    return any(p.search(url) for p in _BLOCK_URL_PATTERNS)
+
 
 async def init_page_block_static(page, request) -> None:  # noqa: ARG001
-    """Block images / fonts / media to speed up navigation."""
+    """Block heavy assets and analytics endpoints to speed up navigation."""
 
     async def _route(route):
-        if route.request.resource_type in {"image", "font", "media", "stylesheet"}:
+        if _should_block(route.request.resource_type, route.request.url):
             await route.abort()
         else:
             await route.continue_()

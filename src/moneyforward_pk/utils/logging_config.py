@@ -7,6 +7,8 @@ import os
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
+from moneyforward_pk.utils.log_filter import attach_sensitive_filter
+
 _CONFIGURED_FLAG = "_moneyforward_pk_logging_configured"
 
 
@@ -54,5 +56,10 @@ def setup_common_logging(
 
     for noisy in ("urllib3", "asyncio", "playwright"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
+
+    # Sensitive-data redaction: attach to root + scrapy + project loggers so
+    # any handler downstream sees a scrubbed record. Idempotent.
+    for name in ("", "scrapy", "moneyforward_pk"):
+        attach_sensitive_filter(logging.getLogger(name))
 
     setattr(root, _CONFIGURED_FLAG, True)
