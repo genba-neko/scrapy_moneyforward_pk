@@ -9,8 +9,8 @@ FIXTURE_HTML = """
 <html><body>
 <table>
   <tbody class="transaction_list">
-    <tr>
-      <td class="target-active"></td>
+    <tr class="target-active">
+      <td></td>
       <td class="date" data-table-sortable-value="2025/01/15-123456"><span>01/15</span></td>
       <td class="content"><span>スーパー購入</span></td>
       <td class="amount"><span>-1,234</span></td>
@@ -26,6 +26,28 @@ FIXTURE_HTML = """
       <td class="note calc" data-original-title="詳細">給与口座</td>
       <td class="lctg"><a>収入</a></td>
       <td class="mctg"><a>給与</a></td>
+      <td class="memo"><span></span></td>
+    </tr>
+  </tbody>
+</table>
+</body></html>
+"""
+
+
+# Pin: nested .target-active on a child cell must NOT promote is_active=True.
+# Only the <tr>'s own class list governs is_active.
+NESTED_ACTIVE_FIXTURE_HTML = """
+<html><body>
+<table>
+  <tbody class="transaction_list">
+    <tr>
+      <td><i class="target-active icon"></i></td>
+      <td class="date" data-table-sortable-value="2025/01/15-111"><span>01/15</span></td>
+      <td class="content"><span>nested</span></td>
+      <td class="amount"><span>-1</span></td>
+      <td class="sub_account_id_hash"><span>cash</span></td>
+      <td class="lctg"><a>etc</a></td>
+      <td class="mctg"><a>etc</a></td>
       <td class="memo"><span></span></td>
     </tr>
   </tbody>
@@ -95,3 +117,22 @@ def test_parse_transactions_extracts_transfer_branch():
     assert transfer["amount_number"] == -50_000
     assert transfer["transaction_account"] == "みずほ普通"
     assert transfer["transaction_detail"] == "振替詳細"
+
+
+def test_parse_transactions_is_active_only_when_on_row_class():
+    """iter2 T2: nested .target-active in child cells must not flip is_active."""
+    response = make_response(NESTED_ACTIVE_FIXTURE_HTML)
+    items = list(parse_transactions(response, 2025, 1))
+    assert len(items) == 1
+    assert items[0]["is_active"] is False
+
+
+def test_parse_transactions_date_sort_re_requires_four_digit_year():
+    """iter2 T2: a sort value with a 2-digit year must be rejected as malformed."""
+    body = (
+        "<table><tr class='transaction_list'>"
+        "<td class='date' data-table-sortable-value='25/01/15-1'>x</td>"
+        "</tr></table>"
+    )
+    response = make_response(body)
+    assert list(parse_transactions(response, 2025, 1)) == []

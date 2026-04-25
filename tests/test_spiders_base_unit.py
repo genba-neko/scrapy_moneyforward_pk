@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+import logging
 from typing import Any, cast
 from unittest.mock import MagicMock
 
@@ -101,3 +103,46 @@ class _NoopAwaitable:
         if False:  # pragma: no cover - never iterated in sync tests
             yield None
         return None
+
+
+def test_base_module_import_does_not_configure_root_logger():
+    """iter2 T2: importing the base spider must not mutate root logger state.
+
+    setup_common_logging() used to fire at import time, which made the test
+    suite's root logger configuration depend on import order. The call now
+    lives inside ``from_crawler`` so library-style imports are side-effect-free.
+    """
+    flag = "_moneyforward_pk_logging_configured"
+    root = logging.getLogger()
+    if hasattr(root, flag):
+        delattr(root, flag)
+
+    # Re-import the module fresh to simulate a cold import.
+    import moneyforward_pk.spiders.base.moneyforward_base as base_mod
+
+    importlib.reload(base_mod)
+    assert not getattr(root, flag, False)
+
+
+def test_errback_playwright_uses_get_running_loop_outside_loop():
+    """iter2 T2: sync test path (no running loop) closes coro instead of raising."""
+    spider = _build_spider()
+
+    class _CoroLike:
+        closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    coro = _CoroLike()
+    page = MagicMock()
+    page.close = MagicMock(return_value=coro)
+    failed_request = Request(
+        url="https://moneyforward.com/cf",
+        meta={"playwright_page": page},
+    )
+    failure = MagicMock()
+    failure.request = failed_request
+
+    spider.errback_playwright(failure)
+    assert coro.closed is True

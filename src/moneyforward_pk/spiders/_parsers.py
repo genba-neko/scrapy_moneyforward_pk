@@ -19,7 +19,7 @@ from moneyforward_pk.items import (
     MoneyforwardTransactionItem,
 )
 
-_DATE_SORT_RE = re.compile(r"(\d+)/(\d+)/(\d+)-\d+")
+_DATE_SORT_RE = re.compile(r"(\d{4})/(\d+)/(\d+)-\d+")
 _ACCOUNT_TRIM_RE = re.compile(r"^(.+?)\(本サイト\).*")
 
 
@@ -54,7 +54,11 @@ def parse_transactions(
             continue
         y, mo, d = (int(g) for g in m.groups())
 
-        is_active = bool(row.css(".target-active"))
+        # Restrict to the row itself: legacy markup applies the
+        # ``target-active`` class to the <tr>, never to nested children.
+        # Using a descendant selector here previously misclassified rows
+        # whose nested controls happened to carry the same class.
+        is_active = "target-active" in (row.attrib.get("class") or "")
         date_text = row.css("td.date span::text").get(default="").strip()
         content = row.css("td.content span::text").get(default="").strip()
         amount_view = row.css("td.amount span::text").get(default="").strip()

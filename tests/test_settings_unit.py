@@ -25,3 +25,17 @@ def test_playwright_contexts_intentionally_empty():
     from moneyforward_pk import settings
 
     assert "default" not in settings.PLAYWRIGHT_CONTEXTS
+
+
+def test_retry_http_codes_excludes_400():
+    """400 is a non-retryable client error; legacy list must drop it.
+
+    iter2 T2: re-driving a 400 cannot fix the request shape, so re-trying
+    just wastes credentials and login attempts.
+    """
+    from moneyforward_pk import settings
+
+    assert 400 not in settings.RETRY_HTTP_CODES
+    # Common transient codes must remain.
+    assert 503 in settings.RETRY_HTTP_CODES
+    assert 429 in settings.RETRY_HTTP_CODES

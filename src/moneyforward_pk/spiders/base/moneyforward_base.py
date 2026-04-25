@@ -27,8 +27,6 @@ from moneyforward_pk.utils.playwright_utils import (
 )
 from moneyforward_pk.utils.session_utils import is_session_expired
 
-setup_common_logging()
-
 logger = logging.getLogger(__name__)
 
 
@@ -52,6 +50,10 @@ class MoneyforwardBase(scrapy.Spider):
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
+        # Configure logging once per crawler boot. Doing this at module import
+        # time would mutate root logger state simply by importing the spider,
+        # which makes unit tests and reusable library imports unsafe.
+        setup_common_logging()
         spider = super().from_crawler(crawler, *args, **kwargs)
         settings = crawler.settings
         if not spider.login_user:
@@ -226,14 +228,16 @@ class MoneyforwardBase(scrapy.Spider):
 
             close_coro = page.close()
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
             except RuntimeError:
                 loop = None
             if loop is not None and loop.is_running():
                 asyncio.ensure_future(close_coro)
             else:
-                # No running loop (sync test path): drop the unawaited coro.
-                close_coro.close() if hasattr(close_coro, "close") else None
+                # No running loop (sync test path): drop the unawaited coro
+                # explicitly so we do not leak a "coroutine never awaited" warning.
+                if hasattr(close_coro, "close"):
+                    close_coro.close()
         except Exception:  # noqa: BLE001, S110
             pass
 
