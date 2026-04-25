@@ -84,10 +84,25 @@ def test_report_message_detail_includes_mctg():
 
 
 def test_report_message_zero_segment_shows_dashes():
-    aggregated = bal_mod.aggregate_balances([])
+    """0 除算を ``"---"`` で回避する経路を assert で固定する.
+
+    分母 (収入合計 / 支出合計) が 0 で、かつ lctg にエントリがある場合、
+    ``"(---%)"`` が現れる. ここでは支出側のみエントリがある状態を作る.
+    """
+    item = {
+        "amount_number": 0,
+        "lctg": "食料品",
+        "mctg": "外食",
+        "transaction_account": "cash",
+    }
+    aggregated = bal_mod.aggregate_balances([item])
     msg = bal_mod.report_message(aggregated, 2026, 4)
-    # ZeroDivision を起こさず "---" 表示
-    assert "(---%)" not in msg or "(---%)" in msg  # 空 lctg なら何も出ない
+    # 集計結果が 0 でも収支内訳に行が立つので、分母 0 → "---" 表示が出る.
+    assert "食料品" in msg
+    assert "(---%)" in msg
+    # 空入力では行自体が立たないので、(---%) は出ない.
+    msg_empty = bal_mod.report_message(bal_mod.aggregate_balances([]), 2026, 4)
+    assert "(---%)" not in msg_empty
 
 
 def test_report_csv_year_summary_has_three_sections():

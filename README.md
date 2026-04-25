@@ -64,18 +64,76 @@ job_runner.bat transaction
 
 ## スパイダー
 
+### mf 本体 (`moneyforward.com`)
+
 | 名前 | 対象 | 出力 Item |
 |-----|-----|----------|
 | `mf_transaction` | `/cf` (月別) | `MoneyforwardTransactionItem` |
 | `mf_asset_allocation` | `/bs/portfolio` | `MoneyforwardAssetAllocationItem` |
 | `mf_account` | `/accounts` + 更新ボタン | `MoneyforwardAccountItem` |
 
-スパイダー引数:
+### 派生サイト (`*.x.moneyforward.com` partner portal)
+
+`scrapy crawl xmf_ssnb_transaction` のように `<variant>_<spider_type>` 形式で
+27 spider が登録されている (`scrapy list` で全数確認可)。variant は
+`spiders/variants/registry.py` の `VARIANTS` dict で URL / login form 名を
+宣言的に管理し、各 spider クラスは 4 行の subclass 宣言で `variant_name` を
+指定するだけで成立する。
+
+| variant | base URL | 由来 |
+|---|---|---|
+| `mf` | `https://moneyforward.com/` | 本体 |
+| `xmf` | `https://x.moneyforward.com/` | 一般 partner portal |
+| `xmf_ssnb` | `https://ssnb.x.moneyforward.com/` | 住信SBIネット銀行 |
+| `xmf_mizuho` | `https://mizuho.x.moneyforward.com/` | みずほ銀行 |
+| `xmf_jabank` | `https://jabank.x.moneyforward.com/` | JAバンク |
+| `xmf_smtb` | `https://smtb.x.moneyforward.com/` | 三井住友信託銀行 |
+| `xmf_linkx` | `https://linkx.x.moneyforward.com/` | linkx家計簿 |
+| `xmf_okashin` | `https://okashin.x.moneyforward.com/` | 岡崎信用金庫 |
+| `xmf_shiga` | `https://shiga.x.moneyforward.com/` | 滋賀銀行 |
+| `xmf_shiz` | `https://shiz.x.moneyforward.com/` | 静岡銀行 |
+
+各 variant につき `*_transaction` / `*_asset_allocation` / `*_account` の
+3 spider が存在する (10 variant × 3 = 30 spider)。
+
+### スパイダー引数
 
 ```powershell
 # 取得月数を引数で上書き (default: SITE_PAST_MONTHS=12)
 ..\.venv-win\Scripts\python -m scrapy crawl mf_transaction -a past_months=3
 ```
+
+## 集計レポート (`reports/` パッケージ)
+
+旧 PJ の `get_balances_report.py` / `get_asset_allocation_report.py` /
+`get_balances_csv.py` を JSONL 入力ベースに移植したもの。
+
+```powershell
+# JSONL 出力から月次収支サマリを Slack 形式で生成
+..\.venv-win\Scripts\python -m moneyforward_pk.reports balances 2026 4
+
+# 1 年分の CSV を標準出力に書く
+..\.venv-win\Scripts\python -m moneyforward_pk.reports balances-csv 2026
+
+# 資産配分のサマリ
+..\.venv-win\Scripts\python -m moneyforward_pk.reports asset-allocation 2026 4 25
+```
+
+純関数 `aggregate_balances` / `aggregate_assets` / `report_message` /
+`report_csv` を `tests/test_reports_*_unit.py` で固定。
+
+## 証券 CSV → 配当データ (`seccsv/` パッケージ)
+
+旧 PJ `seccsv_download/seccsv_to_incomes.py` を移植。SBI / 楽天証券 /
+マネックス証券 / 松井証券 の 4 形式 CSV を判別し、配当・分配金を
+`MoneyforwardTransactionItem` 互換形に正規化する。
+
+```powershell
+..\.venv-win\Scripts\python -m moneyforward_pk.seccsv path/to/SaveFile.csv
+```
+
+`tests/fixtures/seccsv/*_anonymized.csv` で 4 broker 全パスをカバーする
+ユニットテストを `tests/test_seccsv_*_unit.py` に配置している。
 
 ## 出力
 

@@ -35,8 +35,15 @@
 | 11 | (なし) | `utils/paths.py` | ◎ 新規 (output 安全境界) |
 | 12 | `dynamodb/*` (boto3 helpers) | (撤去) | ☓ 撤去 (USER_DIRECTIVES) |
 | 13 | `bg-docker-compose.yml` / `fluent-bit.conf` | (Out-of-scope) | ☓ 別 PJ 管轄 |
-| 14 | `seccsv_download/`, `tables/`, `report_*.py` | (Out-of-scope) | ☓ 別 PJ / legacy 専用 |
-| 15 | `xmf_ssnb` 系スパイダー | (Out-of-scope) | ☓ MF 実環境必須 |
+| 14 | `tables/` (DynamoDB ヘルパー) | (撤去) | ☓ JSON 出力で代替 (USER_DIRECTIVES) |
+| 15 | `get_balances_report.py` | `reports/balances.py` (`aggregate_balances` / `report_message` / `report_csv`) | ★ 移植 (c3 iter1 T2) |
+| 16 | `get_asset_allocation_report.py` | `reports/asset_allocation.py` (`aggregate_assets` / `report_message`) | ★ 移植 (c3 iter1 T2) |
+| 17 | `get_balances_csv.py` | `reports/cli.py` (`python -m moneyforward_pk.reports`) | ★ 移植 (c3 iter1 T2) |
+| 18 | `seccsv_download/seccsv_to_incomes.py` | `seccsv/converter.py` (`convert_csv` / `_parsers.py`) | ★ 移植 (c3 iter1 T3, 4 broker 対応) |
+| 19 | `MfSpider` 多態継承 (1 ファイル 10 クラス) | `spiders/variants/registry.py::VARIANTS` (`VariantConfig` dataclass) | ★ 設計変更 (c3 iter1 T4 + iter2 T2/T4) |
+| 20 | `xmf_ssnb` 系 3 spider | `spiders/xmf_ssnb_*.py` (3 ファイル × 4 行 subclass) | ★ 移植 (c3 iter2 T3) |
+| 21 | 元 PJ 8 派生サイト (`xmf` / `xmf_mizuho` / `xmf_jabank` / `xmf_smtb` / `xmf_linkx` / `xmf_okashin` / `xmf_shiga` / `xmf_shiz`) | `spiders/xmf*.py` × 24 ファイル (登録のみ、selector 調査は実環境必須) | ★ 登録 (c3 iter2 T4) |
+| 22 | `report_*.py` blog 出力 (note.com) | (Out-of-scope) | ☓ note.com SaaS 依存 (USER_DIRECTIVES) |
 
 凡例: ★ 機能維持移植 / ☆ 仕様変更移植 / ◎ 新規追加 / ☓ 撤去 or OOS
 
@@ -59,9 +66,12 @@
 
 | 用途 | legacy | scrapy_moneyforward_pk |
 |---|---|---|
-| transaction 取得 | `scrapy crawl mf_transaction` | `scrapy crawl transaction` |
-| asset 取得 | `scrapy crawl mf_asset_allocation` | `scrapy crawl asset_allocation` |
-| account 取得 | `scrapy crawl mf_account` | `scrapy crawl account` |
+| transaction 取得 (mf 本体) | `scrapy crawl mf` (transactions) | `scrapy crawl mf_transaction` |
+| asset 取得 (mf 本体) | `scrapy crawl mf_asset_allocation` (legacy 名同一) | `scrapy crawl mf_asset_allocation` |
+| account 取得 (mf 本体) | `scrapy crawl mf_account` | `scrapy crawl mf_account` |
+| 派生サイト (例: 住信SBI) | `scrapy crawl xmf_ssnb` | `scrapy crawl xmf_ssnb_transaction` (他 24 派生スパイダー同様) |
+| 集計レポート (CSV) | `python get_balances_csv.py 2024` | `python -m moneyforward_pk.reports balances 2024` |
+| 配当 CSV 変換 | `python seccsv_to_incomes.py path.csv` | `python -m moneyforward_pk.seccsv path.csv` |
 | バッチ実行 | `bg_job_runner.bat` (docker) | `job_runner.bat <name>` (素のホスト) |
 | スケジュール | host cron / Windows タスク | `.github/workflows/scrapy-nightly.yml` |
 
@@ -77,9 +87,9 @@
 下記は本キャンペーンで意図的に未移植。詳細は `plan/CURRENT_ITERATION.md` の
 `out_of_scope` フィールド参照:
 
-- `xmf_*` 系スパイダー (MF 実環境必須)
+- 派生サイト 8 系統の HTML 構造調査 + selector 差分吸収 (`xmf*` 系、登録のみ済 / selector は実環境必須)
 - 2FA 対応 (テスト戦略確立要)
 - 高度 stealth fingerprint (canvas / WebGL)
 - docker 運用基盤一式 (fluent-bit / bg-docker-compose)
-- レポート群 (report_*.py / tables/ / seccsv_download/)
+- blog 投稿 (note.com SaaS 依存、USER_DIRECTIVES で OOS 確定)
 - 元 PJ 完全比較表 (本ドキュメントは要点抜粋)
