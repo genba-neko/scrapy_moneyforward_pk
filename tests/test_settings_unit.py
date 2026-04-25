@@ -1,0 +1,27 @@
+"""Settings module imports and exposes Playwright wiring."""
+
+from __future__ import annotations
+
+
+def test_settings_import_and_keys():
+    from moneyforward_pk import settings
+
+    assert settings.BOT_NAME == "moneyforward_pk"
+    assert settings.SPIDER_MODULES == ["moneyforward_pk.spiders"]
+    assert settings.TWISTED_REACTOR == (
+        "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
+    )
+    assert (
+        settings.DOWNLOAD_HANDLERS["https"]
+        == "scrapy_playwright.handler.ScrapyPlaywrightDownloadHandler"
+    )
+    assert settings.PLAYWRIGHT_BROWSER_TYPE == "chromium"
+    assert isinstance(settings.PLAYWRIGHT_CONTEXTS, dict)
+    assert settings.SITE_PAST_MONTHS >= 1
+
+
+def test_playwright_contexts_intentionally_empty():
+    """Pre-populating 'default' breaks storage_state injection; must stay empty."""
+    from moneyforward_pk import settings
+
+    assert "default" not in settings.PLAYWRIGHT_CONTEXTS

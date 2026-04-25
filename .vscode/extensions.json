@@ -1,0 +1,12 @@
+{
+    "recommendations": [
+        // Python
+        "ms-python.python",
+        "ms-python.pylance",
+        "charliermarsh.ruff",
+        // PowerShell
+        "ms-vscode.powershell",
+        // エディタ設定
+        "editorconfig.editorconfig"
+    ]
+}
