@@ -51,7 +51,7 @@ VARIANTS: dict[str, VariantConfig] = {
         login_form_password="mfid_user[password]",  # noqa: S106 - form field name, not a secret
         is_partner_portal=False,
     ),
-    # c3 iter1 雛形. URL / selector の実値は c3 iter2 以降で実環境調査時に確定.
+    # c3 iter1 で追加. T3 で 3 spider 完全実装.
     "xmf_ssnb": VariantConfig(
         name="xmf_ssnb",
         base_url="https://ssnb.x.moneyforward.com/",
@@ -60,6 +60,87 @@ VARIANTS: dict[str, VariantConfig] = {
         asset_allocation_url="https://ssnb.x.moneyforward.com/bs/portfolio",
         login_form_email="sign_in_session_service[email]",
         login_form_password="sign_in_session_service[password]",  # noqa: S106 - form field name, not a secret
+        is_partner_portal=True,
+    ),
+    # 元 PJ XmfSpider 系列 (一般 partner portal). c3 iter2 T4 で追加.
+    "xmf": VariantConfig(
+        name="xmf",
+        base_url="https://x.moneyforward.com/",
+        accounts_url="https://x.moneyforward.com/accounts",
+        transactions_url="https://x.moneyforward.com/cf",
+        asset_allocation_url="https://x.moneyforward.com/bs/portfolio",
+        login_form_email="sign_in_session_service[email]",
+        login_form_password="sign_in_session_service[password]",  # noqa: S106
+        is_partner_portal=True,
+    ),
+    "xmf_mizuho": VariantConfig(
+        name="xmf_mizuho",
+        base_url="https://mizuho.x.moneyforward.com/",
+        accounts_url="https://mizuho.x.moneyforward.com/accounts",
+        transactions_url="https://mizuho.x.moneyforward.com/cf",
+        asset_allocation_url="https://mizuho.x.moneyforward.com/bs/portfolio",
+        login_form_email="sign_in_session_service[email]",
+        login_form_password="sign_in_session_service[password]",  # noqa: S106
+        is_partner_portal=True,
+    ),
+    "xmf_jabank": VariantConfig(
+        name="xmf_jabank",
+        base_url="https://jabank.x.moneyforward.com/",
+        accounts_url="https://jabank.x.moneyforward.com/accounts",
+        transactions_url="https://jabank.x.moneyforward.com/cf",
+        asset_allocation_url="https://jabank.x.moneyforward.com/bs/portfolio",
+        login_form_email="sign_in_session_service[email]",
+        login_form_password="sign_in_session_service[password]",  # noqa: S106
+        is_partner_portal=True,
+    ),
+    "xmf_smtb": VariantConfig(
+        name="xmf_smtb",
+        base_url="https://smtb.x.moneyforward.com/",
+        accounts_url="https://smtb.x.moneyforward.com/accounts",
+        transactions_url="https://smtb.x.moneyforward.com/cf",
+        asset_allocation_url="https://smtb.x.moneyforward.com/bs/portfolio",
+        login_form_email="sign_in_session_service[email]",
+        login_form_password="sign_in_session_service[password]",  # noqa: S106
+        is_partner_portal=True,
+    ),
+    "xmf_linkx": VariantConfig(
+        name="xmf_linkx",
+        base_url="https://linkx.x.moneyforward.com/",
+        accounts_url="https://linkx.x.moneyforward.com/accounts",
+        transactions_url="https://linkx.x.moneyforward.com/cf",
+        asset_allocation_url="https://linkx.x.moneyforward.com/bs/portfolio",
+        login_form_email="sign_in_session_service[email]",
+        login_form_password="sign_in_session_service[password]",  # noqa: S106
+        is_partner_portal=True,
+    ),
+    "xmf_okashin": VariantConfig(
+        name="xmf_okashin",
+        base_url="https://okashin.x.moneyforward.com/",
+        accounts_url="https://okashin.x.moneyforward.com/accounts",
+        transactions_url="https://okashin.x.moneyforward.com/cf",
+        asset_allocation_url="https://okashin.x.moneyforward.com/bs/portfolio",
+        login_form_email="sign_in_session_service[email]",
+        login_form_password="sign_in_session_service[password]",  # noqa: S106
+        is_partner_portal=True,
+    ),
+    "xmf_shiga": VariantConfig(
+        name="xmf_shiga",
+        base_url="https://shiga.x.moneyforward.com/",
+        accounts_url="https://shiga.x.moneyforward.com/accounts",
+        transactions_url="https://shiga.x.moneyforward.com/cf",
+        asset_allocation_url="https://shiga.x.moneyforward.com/bs/portfolio",
+        login_form_email="sign_in_session_service[email]",
+        login_form_password="sign_in_session_service[password]",  # noqa: S106
+        is_partner_portal=True,
+    ),
+    "xmf_shiz": VariantConfig(
+        name="xmf_shiz",
+        base_url="https://shiz.x.moneyforward.com/",
+        accounts_url="https://shiz.x.moneyforward.com/accounts",
+        transactions_url="https://shiz.x.moneyforward.com/cf",
+        asset_allocation_url="https://shiz.x.moneyforward.com/bs/portfolio",
+        login_form_email="sign_in_session_service[email]",
+        login_form_password="sign_in_session_service[password]",  # noqa: S106
         is_partner_portal=True,
     ),
 }
