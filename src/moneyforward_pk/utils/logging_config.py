@@ -52,7 +52,7 @@ def setup_common_logging(
         fh.setLevel(level)
         root.addHandler(fh)
 
-    for noisy in ("boto3", "botocore", "urllib3", "s3transfer"):
+    for noisy in ("urllib3", "asyncio", "playwright"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     setattr(root, _CONFIGURED_FLAG, True)

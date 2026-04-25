@@ -1,7 +1,7 @@
 """Pure HTML → Item parsers. Kept out of spider classes for unit testing.
 
 Selectors are ported verbatim from the legacy scrapy_moneyforward project so
-the shape of DynamoDB records is preserved.
+the JSON Lines record shape stays identical to the legacy DynamoDB schema.
 """
 
 from __future__ import annotations

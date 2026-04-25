@@ -71,7 +71,7 @@ DOWNLOADER_MIDDLEWARES = {
 }
 
 ITEM_PIPELINES = {
-    "moneyforward_pk.pipelines.DynamoDbPipeline": 300,
+    "moneyforward_pk.pipelines.JsonOutputPipeline": 300,
 }
 
 FEED_EXPORT_ENCODING = "utf-8"
@@ -82,10 +82,12 @@ SITE_LOGIN_PASS = os.environ.get("SITE_LOGIN_PASS", "")
 SITE_LOGIN_ALT_USER = os.environ.get("SITE_LOGIN_ALT_USER", "")
 SITE_PAST_MONTHS = int(os.environ.get("SITE_PAST_MONTHS", "12"))
 
-# DynamoDB
-DYNAMODB_TABLE_NAME = os.environ.get("DYNAMODB_TABLE_NAME", "")
-DYNAMODB_BATCH_N = int(os.environ.get("DYNAMODB_BATCH_N", "10"))
-DYNAMODB_PUT_DELAY = float(os.environ.get("DYNAMODB_PUT_DELAY", "3"))
+# JSON output (replaces the legacy DynamoDB pipeline; USER_DIRECTIVES)
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "")
+OUTPUT_DIR_DEFAULT = str(RUNTIME_DIR / "output")
+OUTPUT_FILENAME_TEMPLATE = os.environ.get(
+    "OUTPUT_FILENAME_TEMPLATE", "{spider}_{date:%Y%m%d}.jsonl"
+)
 
 # Slack
 SLACK_INCOMING_WEBHOOK_URL = os.environ.get("SLACK_INCOMING_WEBHOOK_URL", "")
@@ -99,9 +101,5 @@ LOG_FILE_PATH = str(
         RUNTIME_DIR / "logs" / "moneyforward_pk.log",
     )
 )
-
-# Enable only pipeline when table name is set (avoid forcing AWS in dev/tests)
-if not DYNAMODB_TABLE_NAME:
-    ITEM_PIPELINES = {}
 
 REQUEST_FINGERPRINTER_IMPLEMENTATION = "2.7"
