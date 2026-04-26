@@ -23,6 +23,20 @@ review_blockers: []
 skipped_tasks: []
 ```
 
+### Step 1.5: ブランチ検証 (必須・コミット前ガード)
+
+```bash
+git branch --show-current
+```
+
+| 現在ブランチ | 処理 |
+|---|---|
+| `master` / `main` | **新規作業ブランチを自動作成**: `loop/c{campaign_id}_iter{N}_work` (campaign_id は plan/ 内の `iteration_log.md` 件数+1) → `git checkout -b` |
+| feature branch (`loop/*`, `chore/*`, `fix/*` 等) | そのまま続行 |
+
+これは過去 campaign で plan/* が untracked 累積した問題 (Issue #36) の再発防止策。
+master 直接コミットは RULES3 でも禁止。
+
 ### Step 2: 停止判定
 
 | 条件 | 処理 |

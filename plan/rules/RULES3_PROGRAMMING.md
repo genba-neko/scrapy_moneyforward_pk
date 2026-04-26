@@ -150,6 +150,22 @@ class XmfFooSpider(XMoneyforwardLoginMixin, MoneyforwardBase):
 
 複数タスクをまとめてコミットしない。1タスク = 1コミットを原則とする。
 
+### ステージング対象 (必須)
+
+`git add` 対象は変更ロック内のファイル + **対応する plan ファイル**:
+
+```bash
+# 変更ロックの src/ tests/ ファイル
+git add src/moneyforward_pk/middlewares/playwright_session.py
+git add tests/test_session_unit.py
+# 対応する plan ファイル (RULES2 が生成・RULES3 が更新する)
+git add plan/{plan_file}        # CURRENT_ITERATION.md の plan_file 値
+```
+
+plan ファイルを add し忘れると untracked のまま master に残留する
+(過去の campaign1/c2 で 16 件累積した実績あり)。タスク完了判定の
+チェックボックス更新でプランファイルは必ず変更されているはず。
+
 ### メッセージ形式 (Conventional Commits)
 
 ```
@@ -210,7 +226,8 @@ empty results instead of re-authenticating.
 - `--no-verify` (pre-commit hook スキップ) — hook が失敗したら原因を修正
 - `--amend` でプッシュ済みコミットを書き換え
 - テスト未確認のままコミット
-- `git add .` の無差別ステージング — 変更ロックのファイルのみ `git add`
+- `git add .` の無差別ステージング — 変更ロック + plan ファイルだけを `git add`
+- **master/main ブランチへの直接コミット禁止** — RULES0 でブランチ検証済み前提
 
 ## 全タスク完了後
 
