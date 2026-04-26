@@ -43,9 +43,12 @@ def setup_common_logging(
         else os.environ.get("LOG_FILE_ENABLED", "false").lower() == "true"
     )
     if enabled:
-        path = Path(
-            log_file_path or os.environ.get("LOG_FILE_PATH", "moneyforward_pk.log")
-        )
+        raw = log_file_path or os.environ.get("LOG_FILE_PATH", "moneyforward_pk.log")
+        path = Path(raw)
+        if not path.is_absolute():
+            # Resolve against project root (src/moneyforward_pk/utils/ → 3 levels up)
+            project_root = Path(__file__).resolve().parents[3]
+            path = project_root / path
         path.parent.mkdir(parents=True, exist_ok=True)
         fh = TimedRotatingFileHandler(
             path, when="midnight", backupCount=14, encoding="utf-8"
