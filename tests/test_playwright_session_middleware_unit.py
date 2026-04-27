@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+import pytest
 from scrapy.http import HtmlResponse, Request
 
 from moneyforward_pk.middlewares.playwright_session import (
@@ -110,6 +111,12 @@ def test_retry_invokes_handle_force_login():
 
 
 def test_stops_after_max_retry():
+    """Issue #40 / Opus M2: at retry limit the middleware raises IgnoreRequest
+    so the spider does not see the bad login-page response as content. The
+    ``expired_final`` counter is what crawl_runner reads to mark the spider
+    invocation as ``failed: SessionExpired``."""
+    from scrapy.exceptions import IgnoreRequest
+
     mw = PlaywrightSessionMiddleware(login_max_retry=1)
     stats: dict = {}
     req = _request(attempts=1)
@@ -118,8 +125,8 @@ def test_stops_after_max_retry():
         body=b"<html></html>",
         request=req,
     )
-    out = mw.process_response(req, resp, _spider(stats))
-    assert out is resp
+    with pytest.raises(IgnoreRequest):
+        mw.process_response(req, resp, _spider(stats))
     assert stats["mf_test/session/expired_final"] == 1
 
 
@@ -155,7 +162,10 @@ def test_session_expiry_retry_invalidates_session_state():
 
 
 def test_retry_final_does_not_invoke_handle_force_login():
-    """When attempts >= max, the middleware must NOT route to handle_force_login."""
+    """When attempts >= max, the middleware must NOT route to handle_force_login;
+    instead it raises IgnoreRequest (Issue #40 / Opus M2)."""
+    from scrapy.exceptions import IgnoreRequest
+
     mw = PlaywrightSessionMiddleware(login_max_retry=1)
     spider = _spider({})
     spider.handle_force_login = MagicMock()
@@ -165,6 +175,6 @@ def test_retry_final_does_not_invoke_handle_force_login():
         body=b"<html></html>",
         request=req,
     )
-    out = mw.process_response(req, resp, spider)
-    assert out is resp
+    with pytest.raises(IgnoreRequest):
+        mw.process_response(req, resp, spider)
     spider.handle_force_login.assert_not_called()

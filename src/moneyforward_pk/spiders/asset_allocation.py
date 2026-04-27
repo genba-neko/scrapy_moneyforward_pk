@@ -20,8 +20,9 @@ from moneyforward_pk.utils.playwright_utils import (
 class MfAssetAllocationSpider(MoneyforwardBase):
     """Visit /bs/portfolio and parse asset-allocation rows."""
 
-    name = "mf_asset_allocation"
-    variant_name = "mf"
+    name = "asset_allocation"
+    spider_type = "asset_allocation"
+    variant_name = "mf"  # default; overridden via ``site`` kwarg
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -51,7 +52,14 @@ class MfAssetAllocationSpider(MoneyforwardBase):
 
         portfolio = response.replace(body=html.encode("utf-8"))
         count = 0
-        for item in parse_asset_allocation(portfolio, self.name, self.login_user or ""):
+        # Compose the legacy spider_name used in asset_item_key
+        # (``{site}_{spider_type}``) from registry + class attribute, so the
+        # output key remains identical to the original PJ format even after
+        # consolidating to a single AssetAllocation spider class.
+        spider_key_prefix = f"{self.variant.name}_{self.spider_type}"
+        for item in parse_asset_allocation(
+            portfolio, spider_key_prefix, self.login_user or ""
+        ):
             count += 1
             yield item
         self._inc_stat(f"{self.name}/records", count=count)

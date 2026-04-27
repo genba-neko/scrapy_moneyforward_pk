@@ -1,14 +1,14 @@
 """Base Spider: Playwright login + session handling for MoneyForward.
 
 Subclasses override:
-- ``start_url`` (top page, optional — defaults to ``https://moneyforward.com/``)
-- ``login_flow(page)`` — async coroutine that drives the login UI
-- ``after_login(response)`` — yields the first authenticated requests
-- ``is_partner_portal`` — set True for x.moneyforward.com variants
+- ``spider_type`` (e.g. ``"transaction"``) — used by parsers/pipeline.
+- ``after_login(response)`` — yields the first authenticated requests.
 
-Login flow defaults target the ``moneyforward.com`` (mfid_user) form. The
-``x.moneyforward.com`` partner-portal flow (``sign_in_session_service``) is
-implemented in ``XMoneyforwardLoginMixin``.
+Site (variant) is selected dynamically via the ``site`` spider argument
+(forwarded by ``crawl_runner``) or falls back to ``variant_name`` declared on
+the subclass. The login flow branches on ``self.variant.is_partner_portal``
+to handle ``moneyforward.com`` (mfid_user) vs ``x.moneyforward.com``
+(sign_in_session_service) form layouts.
 """
 
 from __future__ import annotations
@@ -35,14 +35,9 @@ logger = logging.getLogger(__name__)
 
 
 class MoneyforwardBase(scrapy.Spider):
-    """Common foundation. Handles login + errback.
+    """Common foundation. Handles login + errback for all 11 variants."""
 
-    Subclasses declare ``variant_name`` (registry key in ``VARIANTS``) and the
-    base resolves ``self.variant`` so URL / login-form selectors come from the
-    declarative registry rather than hardcoded module constants.
-    """
-
-    # variant_name のデフォルトは "mf" (既存 mf_* スパイダー互換).
+    # Default variant; overridden per-instance via the ``site`` spider arg.
     variant_name: str = "mf"
     # start_url / is_partner_portal は variant から動的に上書きされる.
     start_url: str = "https://moneyforward.com/"
@@ -52,14 +47,16 @@ class MoneyforwardBase(scrapy.Spider):
     def __init__(
         self,
         *args: Any,
+        site: str | None = None,
         login_user: str | None = None,
         login_pass: str | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
-        # variant 解決: クラス属性 ``variant_name`` をキーに registry を引く.
+        # ``site`` kwarg (CLI / runner) overrides the class-level variant_name.
+        if site is not None:
+            self.variant_name = site
         self.variant: VariantConfig = get_variant(self.variant_name)
-        # variant の値で start_url / is_partner_portal を上書き.
         self.start_url = self.variant.base_url
         self.is_partner_portal = self.variant.is_partner_portal
         self.login_user = login_user
@@ -196,21 +193,12 @@ class MoneyforwardBase(scrapy.Spider):
         -------
         scrapy.Request
             A new login request that, after ``login_flow`` succeeds, queues
-            ``retry_request`` via ``after_login``. The login attempt counter
-            in ``retry_request.meta["login_retry_times"]`` is propagated to
-            ``moneyforward_login_attempt`` so the alt-credential fallback in
-            ``_resolve_credentials`` can engage on retries.
+            ``retry_request`` via ``after_login``.
         """
         # Strip the consumed flag so the follow-up does not loop back here.
         retry_request.meta.pop("moneyforward_force_login", None)
-        # PlaywrightSessionMiddleware bumps login_retry_times before handing
-        # control here. Mirror that counter into the login request so
-        # ``login_flow`` can pick alt credentials when configured.
-        attempt = int(retry_request.meta.get("login_retry_times", 0))
         self._inc_stat(f"{self.name}/login/forced")
-        if attempt >= 1 and self.login_alt_user and self.login_alt_pass:
-            self._inc_stat(f"{self.name}/login/alt_user_used")
-        return self._build_login_request(follow_up=retry_request, login_attempt=attempt)
+        return self._build_login_request(follow_up=retry_request)
 
     # ---------------------------------------------------------------- login
 
@@ -303,6 +291,26 @@ class MoneyforwardBase(scrapy.Spider):
             await page.click('button[type="submit"], input[type="submit"]')
         await page.wait_for_load_state("networkidle", timeout=timeout)
         self.logger.info("login_flow: complete current_url=%s", page.url)
+
+    async def _login_flow_partner_portal(self, page) -> None:
+        """x.moneyforward.com (sign_in_session_service) login flow."""
+        timeout = self.login_timeout_ms
+        user = self.login_user or ""
+        password = self.login_pass or ""
+
+        email_field = self.variant.login_form_email
+        password_field = self.variant.login_form_password
+
+        await page.wait_for_load_state("domcontentloaded", timeout=timeout)
+        entry = page.locator('a[href="/users/sign_in"]').first
+        if await entry.count() > 0:
+            await entry.click(timeout=timeout)
+            await page.wait_for_load_state("domcontentloaded", timeout=timeout)
+
+        await page.fill(f'input[name="{email_field}"]', user)
+        await page.fill(f'input[name="{password_field}"]', password)
+        await page.click('button[type="submit"], input[type="submit"]')
+        await page.wait_for_load_state("networkidle", timeout=timeout)
 
     async def _parse_after_login(self, response: Response):
         """Login callback. Returns a **list** of follow-up items/requests.

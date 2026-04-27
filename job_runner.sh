@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Usage: job_runner.sh <transaction|asset|account>
+# Usage: job_runner.sh [transaction|asset|account|all]
+#
+# Backwards-compatible wrapper: dispatches to crawl_runner with the matching
+# --type filter. Bare "all" (or empty) runs every configured site x account
+# x spider type.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,16 +21,21 @@ if [[ ! -x "$PY" ]]; then
     PY="python"
 fi
 
-cmd="${1:-transaction}"
+cmd="${1:-all}"
 case "$cmd" in
-    transaction|trans)  spider="mf_transaction"        ;;
-    asset|allocation)   spider="mf_asset_allocation"   ;;
-    account|accounts)   spider="mf_account"            ;;
+    transaction|trans)  spider_type="transaction"      ;;
+    asset|allocation)   spider_type="asset_allocation" ;;
+    account|accounts)   spider_type="account"          ;;
+    all|"")             spider_type=""                 ;;
     *)
-        echo "Usage: $0 <transaction|asset|account>" >&2
+        echo "Usage: $0 [transaction|asset|account|all]" >&2
         exit 2
         ;;
 esac
 
 cd src
-exec "$PY" -m scrapy crawl "$spider"
+if [[ -n "$spider_type" ]]; then
+    exec "$PY" -m moneyforward_pk.crawl_runner --type "$spider_type"
+else
+    exec "$PY" -m moneyforward_pk.crawl_runner
+fi

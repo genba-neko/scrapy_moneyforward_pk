@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 
 from scrapy import Request
+from scrapy.exceptions import IgnoreRequest
 
 from moneyforward_pk.utils.session_utils import is_session_expired
 
@@ -40,7 +41,13 @@ class PlaywrightSessionMiddleware:
                 "Session expiry persists after %d retries: %s", attempts, response.url
             )
             spider.crawler.stats.inc_value(f"{spider.name}/session/expired_final")
-            return response
+            # Opus M2: drop the request rather than passing the login-page
+            # response down to the spider as if it were valid content. The
+            # ``expired_final`` counter is read by crawl_runner._classify_result
+            # to mark this spider invocation as ``failed: SessionExpired``.
+            raise IgnoreRequest(
+                f"session expiry retry limit exceeded ({attempts}/{self.login_max_retry})"
+            )
 
         spider.logger.warning(
             "Session expired, retrying (%d/%d): %s",

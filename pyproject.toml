@@ -16,7 +16,7 @@ ignore = [
 convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["S101", "S603", "D"]  # テストは docstring 不要
+"tests/**/*.py" = ["S101", "S603", "S106", "D"]  # テストは docstring・hardcoded password 不問
 
 [tool.pyright]
 typeCheckingMode = "basic"

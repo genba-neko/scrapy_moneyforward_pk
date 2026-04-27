@@ -32,55 +32,67 @@ copy .env.example .env
 
 ## 実行
 
+### crawl_runner (推奨)
+
+`config/accounts.yaml` から site × account を読み、3 spider 種別を順次クロール:
+
+```bash
+cd src
+python -m moneyforward_pk.crawl_runner                   # 全 site × 全 account × 全種別
+python -m moneyforward_pk.crawl_runner --type transaction # 全 site × 全 account, transaction のみ
+python -m moneyforward_pk.crawl_runner --site xmf_ssnb    # xmf_ssnb のみ
+python -m moneyforward_pk.crawl_runner --list             # 起動予定一覧 (実行しない)
+```
+
+`config/accounts.example.yaml` をコピーして `config/accounts.yaml` を作成 (gitignore 対象)。
+
+### job_runner (互換)
+
 ```powershell
 # Windows
 job_runner.bat transaction
-job_runner.bat asset
-job_runner.bat account
 ```
 
 ```bash
 # WSL / Linux
-./job_runner.sh transaction
-./job_runner.sh asset
-./job_runner.sh account
+./job_runner.sh transaction      # transaction 種別のみ
+./job_runner.sh all              # 全種別
 ```
 
-直接実行:
+内部で `crawl_runner --type X` を呼ぶ。
 
-```powershell
+### 単発 scrapy crawl
+
+```bash
 cd src
-..\.venv-win\Scripts\python -m scrapy crawl mf_transaction
-..\.venv-win\Scripts\python -m scrapy crawl mf_asset_allocation
-..\.venv-win\Scripts\python -m scrapy crawl mf_account
+python -m scrapy crawl transaction -a site=mf
+python -m scrapy crawl account -a site=xmf_ssnb
+python -m scrapy crawl asset_allocation -a site=xmf_jabank
 ```
+
+env `SITE_LOGIN_USER` / `SITE_LOGIN_PASS` をフォールバックとして使用。
 
 ヘッドレス無効:
 
-```powershell
-$env:MONEYFORWARD_HEADLESS="false"
-job_runner.bat transaction
+```bash
+MONEYFORWARD_HEADLESS=false ./job_runner.sh transaction
 ```
 
 ## スパイダー
 
-### mf 本体 (`moneyforward.com`)
+3 個の汎用 spider クラスが site を引数 (`-a site=<variant>`) で受け取る。
 
-| 名前 | 対象 | 出力 Item |
+| name | 対象 | 出力 Item |
 |-----|-----|----------|
-| `mf_transaction` | `/cf` (月別) | `MoneyforwardTransactionItem` |
-| `mf_asset_allocation` | `/bs/portfolio` | `MoneyforwardAssetAllocationItem` |
-| `mf_account` | `/accounts` + 更新ボタン | `MoneyforwardAccountItem` |
+| `transaction` | `/cf` (月別) | `MoneyforwardTransactionItem` |
+| `asset_allocation` | `/bs/portfolio` | `MoneyforwardAssetAllocationItem` |
+| `account` | `/accounts` + 更新ボタン | `MoneyforwardAccountItem` |
 
-### 派生サイト (`*.x.moneyforward.com` partner portal)
+### Site (variant) 一覧
 
-`scrapy crawl xmf_ssnb_transaction` のように `<variant>_<spider_type>` 形式で
-27 spider が登録されている (`scrapy list` で全数確認可)。variant は
-`spiders/variants/registry.py` の `VARIANTS` dict で URL / login form 名を
-宣言的に管理し、各 spider クラスは 4 行の subclass 宣言で `variant_name` を
-指定するだけで成立する。
+site 設定は [`spiders/variants/registry.py`](src/moneyforward_pk/spiders/variants/registry.py) の `VARIANTS` dict で管理:
 
-| variant | base URL | 由来 |
+| site | base URL | 由来 |
 |---|---|---|
 | `mf` | `https://moneyforward.com/` | 本体 |
 | `xmf` | `https://x.moneyforward.com/` | 一般 partner portal |
@@ -93,14 +105,11 @@ job_runner.bat transaction
 | `xmf_shiga` | `https://shiga.x.moneyforward.com/` | 滋賀銀行 |
 | `xmf_shiz` | `https://shiz.x.moneyforward.com/` | 静岡銀行 |
 
-各 variant につき `*_transaction` / `*_asset_allocation` / `*_account` の
-3 spider が存在する (10 variant × 3 = 30 spider)。
-
 ### スパイダー引数
 
-```powershell
-# 取得月数を引数で上書き (default: SITE_PAST_MONTHS=12)
-..\.venv-win\Scripts\python -m scrapy crawl mf_transaction -a past_months=3
+```bash
+# site 切替 + 取得月数を引数で上書き (default: SITE_PAST_MONTHS=12)
+cd src && python -m scrapy crawl transaction -a site=xmf_ssnb -a past_months=3
 ```
 
 ## 集計レポート (`reports/` パッケージ)
@@ -137,14 +146,17 @@ job_runner.bat transaction
 
 ## 出力
 
-`JsonOutputPipeline` がスパイダーごとに JSON Lines ファイルを書き出す。
+`JsonArrayOutputPipeline` が **3 ファイル集約** で JSON 配列を書き出す
+(元 PJ の出力 contract と同じ)。
 
 - 出力先: `OUTPUT_DIR` (default: `runtime/output/`、プロジェクトルート配下のみ許可)
-- ファイル名: `OUTPUT_FILENAME_TEMPLATE` (default: `{spider}_{date:%Y%m%d}.jsonl`)
-- 形式: 1 行 1 Item の JSON Lines (`ensure_ascii=False`)
-- 同名ファイル衝突時は `-1` `-2` ... のサフィックスで衝突回避
-
-例: `runtime/output/mf_transaction_20260425.jsonl`
+- ファイル名: `moneyforward_{spider_type}.json` の 3 ファイル固定
+  - `moneyforward_transaction.json`
+  - `moneyforward_account.json`
+  - `moneyforward_asset_allocation.json`
+- 形式: 単一の JSON 配列 (`json.load()` 可能)
+- crawl_runner が起動前に 3 ファイルを `[` で初期化、終了時に `]` で閉じる
+- アイテムレベルのサイト識別は `asset_item_key = "{site}_{spider_type}-{user}-{type}"` 等の key 経由
 
 ## ディレクトリ構造
 

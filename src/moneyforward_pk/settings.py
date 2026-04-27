@@ -90,7 +90,7 @@ DOWNLOADER_MIDDLEWARES[
 ] = 590
 
 ITEM_PIPELINES = {
-    "moneyforward_pk.pipelines.JsonOutputPipeline": 300,
+    "moneyforward_pk.pipelines.JsonArrayOutputPipeline": 300,
 }
 
 EXTENSIONS = {
@@ -100,19 +100,20 @@ EXTENSIONS = {
 FEED_EXPORT_ENCODING = "utf-8"
 
 # MoneyForward credentials / tunables
+# Multi-account / per-site credentials live in config/accounts.yaml; the env
+# vars below are a fallback for ad-hoc ``scrapy crawl <name>`` invocations.
 SITE_LOGIN_USER = os.environ.get("SITE_LOGIN_USER", "")
 SITE_LOGIN_PASS = os.environ.get("SITE_LOGIN_PASS", "")
-SITE_LOGIN_ALT_USER = os.environ.get("SITE_LOGIN_ALT_USER", "")
-SITE_LOGIN_ALT_PASS = os.environ.get("SITE_LOGIN_ALT_PASS", "")
 SITE_PAST_MONTHS = int(os.environ.get("SITE_PAST_MONTHS", "12"))
 
 # JSON output (replaces the legacy DynamoDB pipeline; USER_DIRECTIVES)
+# Issue #40: aggregated 3-file JSON-array output (transaction / account /
+# asset_allocation), not per-spider JSONL.
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "")
 OUTPUT_DIR_DEFAULT = str(RUNTIME_DIR / "output")
 OUTPUT_FILENAME_TEMPLATE = os.environ.get(
-    "OUTPUT_FILENAME_TEMPLATE", "{spider}_{date:%Y%m%d}.jsonl"
+    "OUTPUT_FILENAME_TEMPLATE", "moneyforward_{spider_type}.json"
 )
-OUTPUT_RETENTION_DAYS = int(os.environ.get("OUTPUT_RETENTION_DAYS", "14"))
 
 # Slack
 SLACK_INCOMING_WEBHOOK_URL = os.environ.get("SLACK_INCOMING_WEBHOOK_URL", "")

@@ -25,8 +25,9 @@ class MfTransactionSpider(MoneyforwardBase):
     ``past_months`` controls the depth (default from ``SITE_PAST_MONTHS``).
     """
 
-    name = "mf_transaction"
-    variant_name = "mf"
+    name = "transaction"
+    spider_type = "transaction"
+    variant_name = "mf"  # default; overridden via ``site`` kwarg
 
     def __init__(self, *args, past_months: int | str | None = None, **kwargs) -> None:
         super().__init__(*args, **kwargs)

@@ -1,101 +1,116 @@
 """Scrapy pipelines for MoneyForward scraper.
 
-Writes one JSON Lines file per spider under ``OUTPUT_DIR``. Replaces the
-legacy DynamoDB pipeline per ``USER_DIRECTIVES.md``.
+Writes items to **3 aggregated JSON-array files** keyed by spider type
+(transaction / account / asset_allocation). All sites and accounts append
+into the same file per type, matching the original PJ output contract.
+
+The crawl_runner is responsible for:
+- truncating the 3 files (writing ``[``) before run_all begins
+- closing the 3 files (appending ``]``) after run_all ends
+
+Each spider invocation appends its items between an open ``[`` and the
+final ``]``, separated by ``,`` so that the resulting file is a valid
+JSON array (i.e. ``json.load(f)`` succeeds).
 """
 
 from __future__ import annotations
 
 import json
 import logging
-import time
 from pathlib import Path
 from typing import IO, Any
 
 from itemadapter import ItemAdapter
 
-from moneyforward_pk.utils.paths import (
-    ensure_unique_path,
-    resolve_output_dir,
-    resolve_output_path,
-    sanitize_spider_name,
-)
+from moneyforward_pk.utils.paths import resolve_output_dir
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TEMPLATE = "{spider}_{date:%Y%m%d}.jsonl"
-DEFAULT_RETENTION_DAYS = 14
+DEFAULT_FILENAME_TEMPLATE = "moneyforward_{spider_type}.json"
 
 
-class JsonOutputPipeline:
-    """Append items to a per-spider JSON Lines file.
+class JsonArrayOutputPipeline:
+    """Append items to ``moneyforward_{spider_type}.json`` as JSON-array entries.
 
-    The output directory is resolved from the ``OUTPUT_DIR`` setting (default
-    ``runtime/output``) and is required to live inside ``PROJECT_ROOT``. The
-    filename is rendered from ``OUTPUT_FILENAME_TEMPLATE`` (default
-    ``{spider}_{date:%Y%m%d}.jsonl``). Existing files are not overwritten — a
-    numeric suffix is appended on collision.
+    Notes
+    -----
+    Coordination with ``crawl_runner`` is required:
+
+    1. Before ``run_all`` starts, crawl_runner truncates each output file
+       and writes ``[`` (one byte). See ``initialize_output_files`` in
+       ``_runner_core``.
+    2. While spiders run, this pipeline appends items separated by ``,``.
+    3. After ``run_all`` ends, crawl_runner appends ``]`` to each file.
+
+    A single-shot ``scrapy crawl <name>`` invocation (without crawl_runner)
+    will produce a non-closed file ending without ``]``; that mode is
+    out-of-scope for the new pipeline contract.
     """
 
-    def __init__(
-        self,
-        output_dir: Path,
-        template: str,
-        retention_days: int = DEFAULT_RETENTION_DAYS,
-    ) -> None:
+    def __init__(self, output_dir: Path, template: str) -> None:
         self.output_dir = output_dir
         self.template = template
-        self.retention_days = retention_days
         self._file: IO[str] | None = None
         self._path: Path | None = None
-        self._count = 0
+        self._wrote_first_in_run = False
 
     @classmethod
-    def from_crawler(cls, crawler) -> "JsonOutputPipeline":
-        """Build a pipeline from Scrapy ``crawler.settings``."""
+    def from_crawler(cls, crawler) -> "JsonArrayOutputPipeline":
+        """Build a pipeline from ``crawler.settings``."""
         settings = crawler.settings
         default_dir = Path(settings.get("OUTPUT_DIR_DEFAULT", "runtime/output"))
         output_dir = resolve_output_dir(settings.get("OUTPUT_DIR", ""), default_dir)
-        template = settings.get("OUTPUT_FILENAME_TEMPLATE", DEFAULT_TEMPLATE)
-        retention = settings.getint("OUTPUT_RETENTION_DAYS", DEFAULT_RETENTION_DAYS)
-        return cls(output_dir=output_dir, template=template, retention_days=retention)
+        template = settings.get("OUTPUT_FILENAME_TEMPLATE", DEFAULT_FILENAME_TEMPLATE)
+        return cls(output_dir=output_dir, template=template)
 
     def open_spider(self, spider) -> None:
-        """Create the output directory, prune old files, and open the JSONL file."""
+        """Open the per-spider-type file in append mode."""
+        spider_type = getattr(spider, "spider_type", spider.name)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self._prune_stale(spider)
-        target = resolve_output_path(spider.name, self.output_dir, self.template)
-        target = ensure_unique_path(target)
+        # Issue #40 changed output to a fixed-name 3-file aggregate. If the
+        # template does not reference ``{spider_type}``, the configured value
+        # is from a pre-#40 ``.env`` and would land outside the orchestrator's
+        # initialize/finalize bracket-management. Force the default in that
+        # case and warn the operator instead of producing broken JSON files.
+        template = self.template
+        if "{spider_type}" not in template:
+            spider.logger.warning(
+                "OUTPUT_FILENAME_TEMPLATE %r is incompatible with Issue #40; "
+                "falling back to %r. Update .env to silence this warning.",
+                template,
+                DEFAULT_FILENAME_TEMPLATE,
+            )
+            template = DEFAULT_FILENAME_TEMPLATE
+        target = self.output_dir / template.format(spider_type=spider_type)
         self._path = target
-        self._file = target.open("w", encoding="utf-8")
-        spider.logger.info("JsonOutputPipeline open: path=%s", target)
+        # If file is missing or empty, initialize it as ``[``. Normally the
+        # orchestrator does this, but a standalone ``scrapy crawl`` call
+        # should still produce a parseable (though non-finalized) file.
+        if not target.exists() or target.stat().st_size == 0:
+            target.write_text("[", encoding="utf-8")
+        # Decide whether the next item is the first of the current array.
+        # Size > 1 means the file already contains at least one item from
+        # an earlier invocation, so we need to emit a leading ``,``.
+        size = target.stat().st_size
+        self._wrote_first_in_run = size > 1
+        self._file = target.open("a", encoding="utf-8")
+        spider.logger.info("JsonArrayOutputPipeline open: path=%s", target)
 
-    def _prune_stale(self, spider) -> None:
-        """Remove this spider's output files older than ``retention_days``.
-
-        Failure-safe: any unlink error is logged but does not abort the run.
-        Files belonging to other spiders are left untouched (the prefix match
-        uses the same sanitized spider name as the writer).
-        """
-        if self.retention_days <= 0:
-            return
-        cutoff = time.time() - self.retention_days * 86400
-        prefix = sanitize_spider_name(spider.name) + "_"
-        try:
-            entries = list(self.output_dir.iterdir())
-        except FileNotFoundError:
-            return
-        for entry in entries:
-            if not entry.is_file() or not entry.name.startswith(prefix):
-                continue
-            try:
-                if entry.stat().st_mtime < cutoff:
-                    entry.unlink()
-            except OSError as exc:
-                spider.logger.debug("Retention skip %s: %s", entry, exc)
+    def process_item(self, item: Any, spider) -> Any:
+        """Serialize ``item`` and append to the JSON array."""
+        if self._file is None:
+            raise RuntimeError(
+                "JsonArrayOutputPipeline.process_item called before open_spider"
+            )
+        record = ItemAdapter(item).asdict()
+        if self._wrote_first_in_run:
+            self._file.write(",")
+        self._file.write(json.dumps(record, ensure_ascii=False, default=str))
+        self._wrote_first_in_run = True
+        return item
 
     def close_spider(self, spider) -> None:
-        """Flush + close the file and stash the path/count in stats."""
+        """Flush + close. Note: closing ``]`` is written by the runner."""
         if self._file is not None:
             self._file.flush()
             self._file.close()
@@ -104,17 +119,3 @@ class JsonOutputPipeline:
         stats = getattr(crawler, "stats", None) if crawler is not None else None
         if stats is not None and self._path is not None:
             stats.set_value(f"{spider.name}/output/path", str(self._path))
-            stats.set_value(f"{spider.name}/output/items", self._count)
-
-    def process_item(self, item: Any, spider) -> Any:
-        """Serialize ``item`` as a single JSON Lines record."""
-        if self._file is None:
-            raise RuntimeError(
-                "JsonOutputPipeline.process_item called before open_spider"
-            )
-        record = ItemAdapter(item).asdict()
-        line = json.dumps(record, ensure_ascii=False, default=str)
-        self._file.write(line)
-        self._file.write("\n")
-        self._count += 1
-        return item

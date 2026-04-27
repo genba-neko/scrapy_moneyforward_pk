@@ -97,11 +97,15 @@ Conventional Commits: `feat:` / `fix:` / `chore:` など。
 - 過去事例: `MONEYFORWARD_HEADLESS=ｆalse` (全角ｆ) で headless 解除されない不具合
 - 確認: `grep -nE "[Ａ-Ｚａ-ｚ０-９]" .env` で全角混入検出
 
-### Spider 起動範囲
+### Spider 起動範囲 (Issue #40 以降)
 
-- `job_runner.sh` 対応: mf_* 3 個 (transaction / asset / account) のみ
-- xmf_* 27 個 (9 partner portal × 3 種別) は `scrapy crawl xmf_xxx_xxx` で個別起動
-- 全 variant 循環ロジックは未実装 (将来課題)
+- Spider クラスは 3 個のみ: `transaction` / `account` / `asset_allocation`
+- site (mf / xmf_ssnb / xmf_mizuho 等) は `-a site=xmf_ssnb` の Scrapy 引数で渡す
+- 通常運用は `crawl_runner` 経由: `cd src && python -m moneyforward_pk.crawl_runner`
+  - `config/accounts.yaml` (gitignore) からサイト×アカウント一覧を読込、順次クロール
+  - 出力は 3 ファイル集約 (`runtime/output/moneyforward_{transaction,account,asset_allocation}.json`)
+- `job_runner.sh transaction|asset|account|all` も互換維持 (内部で crawl_runner 呼出)
+- 単発 `scrapy crawl transaction -a site=mf` も可 (env `SITE_LOGIN_USER` / `SITE_LOGIN_PASS` 経由)
 
 ### 破壊的操作の鉄則
 
