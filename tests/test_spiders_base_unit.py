@@ -238,8 +238,9 @@ def test_parse_after_login_missing_page_logs_and_returns():
         request=Request(url="https://moneyforward.com/"),
     )
 
+    # _parse_after_login is now a coroutine returning a list (not async gen).
     async def gather():
-        return await _collect(spider._parse_after_login(response))
+        return await spider._parse_after_login(response)
 
     result = _drive(gather())
     assert result == []
@@ -275,7 +276,7 @@ def test_parse_after_login_passes_login_attempt_to_login_flow():
     response.meta["moneyforward_login_attempt"] = 2
 
     async def gather():
-        return await _collect(spider._parse_after_login(response))
+        return await spider._parse_after_login(response)
 
     _drive(gather())
     assert captured["attempt"] == 2

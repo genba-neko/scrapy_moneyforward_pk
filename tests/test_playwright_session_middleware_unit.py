@@ -132,6 +132,28 @@ def test_from_crawler_uses_settings_login_max_retry():
     crawler.settings.getint.assert_called_with("MONEYFORWARD_LOGIN_MAX_RETRY", 2)
 
 
+def test_session_expiry_retry_invalidates_session_state():
+    """Issue #43: middleware must drop on-disk storage_state before retry."""
+    mw = PlaywrightSessionMiddleware(login_max_retry=2)
+    stats: dict = {}
+    spider = _spider(stats)
+    spider.session_manager = MagicMock()
+    spider.handle_force_login = MagicMock(side_effect=lambda r: r)
+    req = _request(attempts=0)
+    # Add a stored storage_state to confirm it gets stripped from the retry.
+    req.meta["playwright_context_kwargs"] = {"storage_state": "/tmp/stale.json"}
+    resp = HtmlResponse(
+        url="https://moneyforward.com/sign_in",
+        body=b"<html></html>",
+        request=req,
+    )
+    out = mw.process_response(req, resp, spider)
+    spider.session_manager.invalidate_session.assert_called_once()
+    # The retry request must not carry the stale storage_state.
+    assert isinstance(out, Request)
+    assert "playwright_context_kwargs" not in out.meta
+
+
 def test_retry_final_does_not_invoke_handle_force_login():
     """When attempts >= max, the middleware must NOT route to handle_force_login."""
     mw = PlaywrightSessionMiddleware(login_max_retry=1)
