@@ -12,8 +12,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_DIR = PROJECT_ROOT / "runtime"
 
 # .env load (skip during pytest to preserve test-controlled env)
+# Issue #44: ``override=True`` so .env is the source of truth. The PowerShell
+# workbench profile (workbench/scripts/profile.ps1::Import-Env) injects .env
+# values into the process env at terminal-start, but stale values persist when
+# .env is edited without re-sourcing the profile. Without override=True,
+# load_dotenv would respect those stale values and silently override the
+# current .env contents.
 if "pytest" not in sys.modules:
-    load_dotenv(PROJECT_ROOT / ".env", override=False)
+    load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 
 def _resolve_project_path(value: str | os.PathLike[str], default: Path) -> Path:
