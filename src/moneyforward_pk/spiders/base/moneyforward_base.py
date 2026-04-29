@@ -14,14 +14,16 @@ implemented in ``XMoneyforwardLoginMixin``.
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncIterator, Iterable, cast
+from typing import Any, AsyncIterator, Iterable
 
 import scrapy
 from scrapy.http import Response
 from scrapy_playwright.page import PageMethod
 
+from moneyforward_pk.auth import SessionManager
 from moneyforward_pk.spiders.variants import VariantConfig, get_variant
 from moneyforward_pk.utils.logging_config import setup_common_logging
+from moneyforward_pk.utils.paths import PROJECT_ROOT
 from moneyforward_pk.utils.playwright_utils import (
     build_playwright_meta,
     close_page_quietly,
@@ -67,6 +69,9 @@ class MoneyforwardBase(scrapy.Spider):
         # ``from_crawler`` and never logged. Empty strings disable the path.
         self.login_alt_user: str = ""
         self.login_alt_pass: str = ""
+        # SessionManager is wired in ``from_crawler`` once the crawler is
+        # attached so ``runtime/state`` is resolved relative to PROJECT_ROOT.
+        self.session_manager: SessionManager | None = None
 
     @classmethod
     def from_crawler(cls, crawler, *args, **kwargs):
@@ -87,6 +92,22 @@ class MoneyforwardBase(scrapy.Spider):
         if not spider.login_user or not spider.login_pass:
             spider.logger.warning(
                 "SITE_LOGIN_USER / SITE_LOGIN_PASS not configured; login will fail."
+            )
+        # Issue #43: session persistence — one storage_state file per
+        # (variant, login_user). When the file exists at request time the
+        # request is sent with ``playwright_context_kwargs={"storage_state":
+        # ...}`` so Playwright reuses the cookies and login_flow becomes
+        # a no-op. The state is refreshed after every successful login.
+        if spider.login_user:
+            # PROJECT_ROOT is src/.. (computed in utils/paths.py with the
+            # correct parents[3] count from the utils module). Use it to
+            # avoid the parents[N] off-by-one bug that placed state files
+            # under src/runtime/ during the initial implementation.
+            state_dir = PROJECT_ROOT / "runtime" / "state"
+            spider.session_manager = SessionManager(
+                state_dir=state_dir,
+                site=spider.variant_name,
+                login_user=spider.login_user,
             )
         return spider
 
@@ -147,6 +168,13 @@ class MoneyforwardBase(scrapy.Spider):
         if follow_up is not None:
             meta["moneyforward_follow_up"] = follow_up
         meta["moneyforward_login_attempt"] = login_attempt
+        # Issue #43: inject a saved storage_state when one is on disk so
+        # Playwright reuses the existing logged-in session. login_flow then
+        # detects "already logged in" and skips form filling.
+        if self.session_manager is not None:
+            state_path = self.session_manager.get_storage_state()
+            if state_path:
+                meta["playwright_context_kwargs"] = {"storage_state": state_path}
         return scrapy.Request(
             url=self.start_url,
             callback=self._parse_after_login,
@@ -186,6 +214,24 @@ class MoneyforwardBase(scrapy.Spider):
 
     # ---------------------------------------------------------------- login
 
+    async def _is_logged_in_page(self, page) -> bool:
+        """Return True if the current page indicates an authenticated session.
+
+        Heuristic: presence of a logout link (``a[href*="/sign_out"]``) and
+        the URL not pointing at a sign-in / signup form. MoneyForward and
+        all partner portals render a logout link in the top-right header
+        whenever the user is logged in.
+        """
+        try:
+            url = page.url or ""
+            # Already on a login form → definitely not logged in.
+            if "/sign_in" in url or "/users/sign_up" in url:
+                return False
+            logout = page.locator('a[href*="/sign_out"]').first
+            return await logout.count() > 0
+        except Exception:  # noqa: BLE001
+            return False
+
     async def login_flow(self, page, *, login_attempt: int = 0) -> None:
         """Drive the moneyforward.com login UI via Playwright.
 
@@ -197,58 +243,114 @@ class MoneyforwardBase(scrapy.Spider):
             Zero-based login attempt counter. Forwarded to
             ``_resolve_credentials`` so alt credentials can engage on
             retries when configured.
+
+        Notes
+        -----
+        Issue #43: navigates **directly** to ``variant.login_url`` instead
+        of clicking the top-page header link. The header DOM differs
+        across mf/xmf variants and is JS-rendered in some cases, which
+        made the previous ``a[href=...]`` click-based flow brittle. Going
+        straight to the form bypasses that entirely.
         """
         timeout = self.login_timeout_ms
         user, password = self._resolve_credentials(login_attempt)
-
-        await page.wait_for_load_state("domcontentloaded", timeout=timeout)
-
-        # Top page → /sign_in
-        sign_in_link = page.locator('a[href="/sign_in"]').first
-        if await sign_in_link.count() > 0:
-            await sign_in_link.click(timeout=timeout)
-            await page.wait_for_load_state("domcontentloaded", timeout=timeout)
-
-        # /sign_in → /sign_in/email
-        email_link = page.locator('a[href^="/sign_in/email"]').first
-        if await email_link.count() > 0:
-            await email_link.click(timeout=timeout)
-            await page.wait_for_load_state("domcontentloaded", timeout=timeout)
-
-        # Step 1: email (variant の form name を使う)
         email_field = self.variant.login_form_email
         password_field = self.variant.login_form_password
-        await page.fill(f'input[name="{email_field}"]', user)
-        await page.click('button[type="submit"], input[type="submit"]')
-        await page.wait_for_load_state("domcontentloaded", timeout=timeout)
+        login_url = self.variant.login_url
 
-        # Step 2: password (presented on a separate page)
-        await page.fill(
-            f'input[name="{password_field}"], input[type="password"]',
-            password,
+        self.logger.info(
+            "login_flow start: variant=%s login_url=%s current_url=%s",
+            self.variant.name,
+            login_url,
+            page.url,
         )
-        await page.click('button[type="submit"], input[type="submit"]')
+
+        # Always navigate to the explicit login URL. ``wait_for_selector``
+        # is more reliable than ``wait_for_load_state`` for SPA-ish pages
+        # because it actually waits until the form is present.
+        await page.goto(login_url, wait_until="domcontentloaded", timeout=timeout)
+        self.logger.info("login_flow: after goto current_url=%s", page.url)
+
+        await page.wait_for_selector(f'input[name="{email_field}"]', timeout=timeout)
+        self.logger.info("login_flow: email input visible")
+
+        # Probe password field on same page → 1-page form vs 2-page form.
+        password_locator = page.locator(f'input[name="{password_field}"]')
+        password_count = await password_locator.count()
+        single_page = password_count > 0
+        self.logger.info(
+            "login_flow: form layout = %s (password_count=%d)",
+            "1-page" if single_page else "2-page",
+            password_count,
+        )
+
+        await page.fill(f'input[name="{email_field}"]', user)
+        if single_page:
+            await page.fill(f'input[name="{password_field}"]', password)
+            await page.click('button[type="submit"], input[type="submit"]')
+        else:
+            # Step 1: submit email
+            await page.click('button[type="submit"], input[type="submit"]')
+            await page.wait_for_selector(
+                f'input[name="{password_field}"], input[type="password"]',
+                timeout=timeout,
+            )
+            # Step 2: submit password
+            await page.fill(
+                f'input[name="{password_field}"], input[type="password"]',
+                password,
+            )
+            await page.click('button[type="submit"], input[type="submit"]')
         await page.wait_for_load_state("networkidle", timeout=timeout)
+        self.logger.info("login_flow: complete current_url=%s", page.url)
 
     async def _parse_after_login(self, response: Response):
+        """Login callback. Returns a **list** of follow-up items/requests.
+
+        Note: returns a list (not an async generator) to avoid Scrapy's
+        lazy async-iteration that pulls one yield at a time. With async
+        generators, after the first yield the engine schedules that
+        request, processes it, finds the scheduler empty (because the
+        generator is paused mid-loop), and closes the spider — losing
+        the remaining N-1 requests. Returning a list eagerly enqueues
+        all of them. Issue #43 root cause for "1/12 months fetched".
+        """
         page = response.meta.get("playwright_page")
         if page is None:
             self.logger.error("No playwright_page attached to login response")
-            return
+            return []
 
         login_attempt = int(response.meta.get("moneyforward_login_attempt", 0))
 
         async with managed_page(page) as p:
-            try:
-                await self.login_flow(p, login_attempt=login_attempt)
-            except Exception as exc:  # noqa: BLE001
-                self.logger.exception("Login flow failed: %s", exc)
-                self._inc_stat(f"{self.name}/login/failed")
-                return
+            # Issue #43: when a stored storage_state was injected and the
+            # session is still valid, the page is already authenticated.
+            # Skip login_flow in that case to avoid the bot-detection risk
+            # of repeatedly re-logging in.
+            already_logged_in = await self._is_logged_in_page(p)
+            if already_logged_in:
+                self.logger.info("Reusing saved session (login_flow skipped)")
+                self._inc_stat(f"{self.name}/login/skipped")
+            else:
+                try:
+                    await self.login_flow(p, login_attempt=login_attempt)
+                except Exception as exc:  # noqa: BLE001
+                    self.logger.exception("Login flow failed: %s", exc)
+                    self._inc_stat(f"{self.name}/login/failed")
+                    if self.session_manager is not None:
+                        # Drop the (now-known-bad) state file so the next
+                        # invocation starts from a clean login.
+                        self.session_manager.invalidate_session()
+                    return []
 
             current_url = p.url
             title = await p.title()
             self.logger.info("Login complete: url=%s title=%s", current_url, title)
+
+            # Persist the post-login storage_state so the next spider
+            # invocation can reuse the cookies. Failure is non-fatal.
+            if self.session_manager is not None:
+                await self.session_manager.save_from_context(p.context)
 
             # Bridge page → HtmlResponse for downstream parsing.
             html = await p.content()
@@ -258,18 +360,23 @@ class MoneyforwardBase(scrapy.Spider):
         if is_session_expired(post_login):
             self.logger.error("Still on login page after login_flow")
             self._inc_stat(f"{self.name}/login/still_on_login")
-            return
+            return []
 
         self._inc_stat(f"{self.name}/login/success")
 
         follow_up = response.meta.get("moneyforward_follow_up")
         if follow_up is not None:
             self.logger.info("Replaying request after forced login: %s", follow_up.url)
-            yield follow_up
-            return
+            return [follow_up]
 
+        results: list = []
         async for item_or_request in self._iter_after_login(post_login):
-            yield item_or_request
+            results.append(item_or_request)
+        self.logger.info(
+            "_parse_after_login: returning %d follow-up items/requests",
+            len(results),
+        )
+        return results
 
     async def _iter_after_login(self, response: Response):
         result = self.after_login(response)
@@ -323,34 +430,12 @@ class MoneyforwardBase(scrapy.Spider):
 
 
 class XMoneyforwardLoginMixin:
-    """Alternative login flow for ``*.x.moneyforward.com`` partner portals."""
+    """Backward-compat alias.
 
-    async def login_flow(self, page, *, login_attempt: int = 0) -> None:  # type: ignore[override]
-        timeout = getattr(self, "login_timeout_ms", 60_000)
-        resolver = getattr(self, "_resolve_credentials", None)
-        if callable(resolver):
-            resolved = cast("tuple[str, str]", resolver(login_attempt))
-            login_user, login_pass = resolved
-        else:
-            login_user = getattr(self, "login_user", "") or ""
-            login_pass = getattr(self, "login_pass", "") or ""
-
-        # variant の form name を使う (派生サイト共通: sign_in_session_service).
-        variant = getattr(self, "variant", None)
-        if variant is not None:
-            email_field = variant.login_form_email
-            password_field = variant.login_form_password
-        else:
-            email_field = "sign_in_session_service[email]"
-            password_field = "sign_in_session_service[password]"  # noqa: S105
-
-        await page.wait_for_load_state("domcontentloaded", timeout=timeout)
-        entry = page.locator('a[href="/users/sign_in"]').first
-        if await entry.count() > 0:
-            await entry.click(timeout=timeout)
-            await page.wait_for_load_state("domcontentloaded", timeout=timeout)
-
-        await page.fill(f'input[name="{email_field}"]', login_user)
-        await page.fill(f'input[name="{password_field}"]', login_pass)
-        await page.click('button[type="submit"], input[type="submit"]')
-        await page.wait_for_load_state("networkidle", timeout=timeout)
+    Issue #43: ``MoneyforwardBase.login_flow`` now drives both mf and
+    partner-portal logins by branching on ``variant.is_partner_portal``
+    and navigating directly to ``variant.login_url``. This mixin no
+    longer needs to override ``login_flow``; it remains as a marker
+    class so existing ``isinstance(spider, XMoneyforwardLoginMixin)``
+    checks keep working.
+    """

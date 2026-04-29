@@ -27,6 +27,12 @@ class VariantConfig:
         パスワード入力 ``input[name="..."]`` の name 属性.
     is_partner_portal : bool
         ``x.moneyforward.com`` 系 (パートナーポータル) なら True.
+
+    Notes
+    -----
+    Derived attribute ``login_url`` returns the explicit sign-in form URL
+    (``/sign_in`` for mf, ``/users/sign_in`` for partner portals) so
+    spiders can navigate directly without scraping the top-page header.
     """
 
     name: str
@@ -37,6 +43,12 @@ class VariantConfig:
     login_form_email: str
     login_form_password: str
     is_partner_portal: bool
+
+    @property
+    def login_url(self) -> str:
+        """Direct URL of the login form for this variant."""
+        suffix = "users/sign_in" if self.is_partner_portal else "sign_in"
+        return self.base_url.rstrip("/") + "/" + suffix
 
 
 # 既知 variant. ``mf`` は既存 spider 群と等価設定 (refactor 前互換).

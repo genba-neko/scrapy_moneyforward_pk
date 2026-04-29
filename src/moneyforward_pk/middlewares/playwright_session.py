@@ -50,6 +50,14 @@ class PlaywrightSessionMiddleware:
         )
         spider.crawler.stats.inc_value(f"{spider.name}/session/retry")
 
+        # Issue #43: drop the on-disk storage_state so the retry request
+        # does not get the same stale cookies injected by
+        # ``_build_login_request``. Without this, a permanently-invalid
+        # session file would loop ``expired → retry → expired`` forever.
+        session_manager = getattr(spider, "session_manager", None)
+        if session_manager is not None:
+            session_manager.invalidate_session()
+
         new_request = request.copy()
         new_request.dont_filter = True
         # Drop stale Playwright handles inherited from request.copy(): the
@@ -57,6 +65,9 @@ class PlaywrightSessionMiddleware:
         # so reusing it would double-close via managed_page (defect C2).
         new_request.meta.pop("playwright_page", None)
         new_request.meta.pop("playwright_page_methods", None)
+        # Also drop the storage_state injection from the original request so
+        # the retry doesn't carry the just-invalidated session cookies.
+        new_request.meta.pop("playwright_context_kwargs", None)
         new_request.meta["login_retry_times"] = attempts + 1
         new_request.meta["moneyforward_force_login"] = True
 
