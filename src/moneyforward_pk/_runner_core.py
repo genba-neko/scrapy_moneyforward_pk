@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
@@ -31,7 +31,9 @@ class Account:
     """1 アカウント分のログイン情報."""
 
     user: str
-    password: str
+    # repr=False: logger.exception 等で dataclass がそのまま展開された際の
+    # password 平文流出を防ぐ (Opus review Critical 1).
+    password: str = field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -47,13 +49,13 @@ class Invocation:
     user : str
         ログインユーザ (email).
     password : str
-        ログインパスワード.
+        ログインパスワード. ``repr`` には含めない (機密情報).
     """
 
     site: str
     spider_type: str
     user: str
-    password: str
+    password: str = field(repr=False)
 
 
 def load_accounts(yaml_path: str | Path) -> dict[str, list[Account]]:
@@ -307,7 +309,9 @@ def run_all(
         try:
             runner = CrawlerRunner(settings)
         except Exception as exc:  # noqa: BLE001
-            # Opus m6: CrawlerRunner 構築失敗時は全 invocation を failed 化
+            # Opus m6: CrawlerRunner 構築失敗時は全 invocation を failed 化。
+            # 失敗理由 (例: 設定不備) を必ずログに残す (Opus review Minor 7)。
+            logger.exception("CrawlerRunner construction failed: %s", exc)
             for inv in invocations:
                 results[inv] = f"failed: init_{exc.__class__.__name__}"
             return

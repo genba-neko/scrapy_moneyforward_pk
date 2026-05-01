@@ -5,10 +5,12 @@ Subclasses override:
 - ``after_login(response)`` — yields the first authenticated requests.
 
 Site (variant) is selected dynamically via the ``site`` spider argument
-(forwarded by ``crawl_runner``) or falls back to ``variant_name`` declared on
-the subclass. The login flow branches on ``self.variant.is_partner_portal``
-to handle ``moneyforward.com`` (mfid_user) vs ``x.moneyforward.com``
-(sign_in_session_service) form layouts.
+(forwarded by ``crawl_runner``) or falls back to ``variant_name`` declared
+on the subclass. The login flow probes for the password field to decide
+between 1-page vs 2-page form layouts and works uniformly for both
+``moneyforward.com`` (mfid_user) and ``x.moneyforward.com``
+(sign_in_session_service); per-variant differences are absorbed via
+``variant.login_url`` / ``login_form_email`` / ``login_form_password``.
 """
 
 from __future__ import annotations
@@ -61,11 +63,6 @@ class MoneyforwardBase(scrapy.Spider):
         self.is_partner_portal = self.variant.is_partner_portal
         self.login_user = login_user
         self.login_pass = login_pass
-        # Optional alternative credential pair for fallback when the primary
-        # account is locked / temporarily refused. Loaded from settings in
-        # ``from_crawler`` and never logged. Empty strings disable the path.
-        self.login_alt_user: str = ""
-        self.login_alt_pass: str = ""
         # SessionManager is wired in ``from_crawler`` once the crawler is
         # attached so ``runtime/state`` is resolved relative to PROJECT_ROOT.
         self.session_manager: SessionManager | None = None
@@ -82,10 +79,6 @@ class MoneyforwardBase(scrapy.Spider):
             spider.login_user = settings.get("SITE_LOGIN_USER", "")
         if not spider.login_pass:
             spider.login_pass = settings.get("SITE_LOGIN_PASS", "")
-        # Alt credentials are env-only (do not allow CLI override to avoid
-        # leaking secrets via shell history).
-        spider.login_alt_user = settings.get("SITE_LOGIN_ALT_USER", "") or ""
-        spider.login_alt_pass = settings.get("SITE_LOGIN_ALT_PASS", "") or ""
         if not spider.login_user or not spider.login_pass:
             spider.logger.warning(
                 "SITE_LOGIN_USER / SITE_LOGIN_PASS not configured; login will fail."
@@ -110,27 +103,6 @@ class MoneyforwardBase(scrapy.Spider):
 
     # ----------------------------------------------------------- credentials
 
-    def _resolve_credentials(self, attempt: int) -> tuple[str, str]:
-        """Pick the credential pair for a given login attempt.
-
-        Parameters
-        ----------
-        attempt : int
-            Zero-based login attempt counter. ``0`` selects the primary
-            credentials. ``>= 1`` falls back to ``SITE_LOGIN_ALT_USER`` /
-            ``SITE_LOGIN_ALT_PASS`` when both are configured.
-
-        Returns
-        -------
-        tuple[str, str]
-            ``(user, password)`` to use for this attempt. Returns the primary
-            pair when alt credentials are unset so behavior is unchanged for
-            users who do not configure the alt path.
-        """
-        if attempt >= 1 and self.login_alt_user and self.login_alt_pass:
-            return self.login_alt_user, self.login_alt_pass
-        return (self.login_user or "", self.login_pass or "")
-
     # --------------------------------------------------------------- helpers
 
     def _inc_stat(self, key: str, count: int = 1) -> None:
@@ -154,7 +126,6 @@ class MoneyforwardBase(scrapy.Spider):
         self,
         *,
         follow_up: scrapy.Request | None = None,
-        login_attempt: int = 0,
     ) -> scrapy.Request:
         meta = build_playwright_meta(
             include_page=True,
@@ -164,7 +135,6 @@ class MoneyforwardBase(scrapy.Spider):
         )
         if follow_up is not None:
             meta["moneyforward_follow_up"] = follow_up
-        meta["moneyforward_login_attempt"] = login_attempt
         # Issue #43: inject a saved storage_state when one is on disk so
         # Playwright reuses the existing logged-in session. login_flow then
         # detects "already logged in" and skips form filling.
@@ -220,17 +190,13 @@ class MoneyforwardBase(scrapy.Spider):
         except Exception:  # noqa: BLE001
             return False
 
-    async def login_flow(self, page, *, login_attempt: int = 0) -> None:
+    async def login_flow(self, page) -> None:
         """Drive the moneyforward.com login UI via Playwright.
 
         Parameters
         ----------
         page : playwright.async_api.Page
             Page handle delivered by scrapy-playwright.
-        login_attempt : int, optional
-            Zero-based login attempt counter. Forwarded to
-            ``_resolve_credentials`` so alt credentials can engage on
-            retries when configured.
 
         Notes
         -----
@@ -241,7 +207,8 @@ class MoneyforwardBase(scrapy.Spider):
         straight to the form bypasses that entirely.
         """
         timeout = self.login_timeout_ms
-        user, password = self._resolve_credentials(login_attempt)
+        user = self.login_user or ""
+        password = self.login_pass or ""
         email_field = self.variant.login_form_email
         password_field = self.variant.login_form_password
         login_url = self.variant.login_url
@@ -292,26 +259,6 @@ class MoneyforwardBase(scrapy.Spider):
         await page.wait_for_load_state("networkidle", timeout=timeout)
         self.logger.info("login_flow: complete current_url=%s", page.url)
 
-    async def _login_flow_partner_portal(self, page) -> None:
-        """x.moneyforward.com (sign_in_session_service) login flow."""
-        timeout = self.login_timeout_ms
-        user = self.login_user or ""
-        password = self.login_pass or ""
-
-        email_field = self.variant.login_form_email
-        password_field = self.variant.login_form_password
-
-        await page.wait_for_load_state("domcontentloaded", timeout=timeout)
-        entry = page.locator('a[href="/users/sign_in"]').first
-        if await entry.count() > 0:
-            await entry.click(timeout=timeout)
-            await page.wait_for_load_state("domcontentloaded", timeout=timeout)
-
-        await page.fill(f'input[name="{email_field}"]', user)
-        await page.fill(f'input[name="{password_field}"]', password)
-        await page.click('button[type="submit"], input[type="submit"]')
-        await page.wait_for_load_state("networkidle", timeout=timeout)
-
     async def _parse_after_login(self, response: Response):
         """Login callback. Returns a **list** of follow-up items/requests.
 
@@ -328,8 +275,6 @@ class MoneyforwardBase(scrapy.Spider):
             self.logger.error("No playwright_page attached to login response")
             return []
 
-        login_attempt = int(response.meta.get("moneyforward_login_attempt", 0))
-
         async with managed_page(page) as p:
             # Issue #43: when a stored storage_state was injected and the
             # session is still valid, the page is already authenticated.
@@ -341,7 +286,7 @@ class MoneyforwardBase(scrapy.Spider):
                 self._inc_stat(f"{self.name}/login/skipped")
             else:
                 try:
-                    await self.login_flow(p, login_attempt=login_attempt)
+                    await self.login_flow(p)
                 except Exception as exc:  # noqa: BLE001
                     self.logger.exception("Login flow failed: %s", exc)
                     self._inc_stat(f"{self.name}/login/failed")
@@ -438,12 +383,12 @@ class MoneyforwardBase(scrapy.Spider):
 
 
 class XMoneyforwardLoginMixin:
-    """Backward-compat alias.
+    """Backward-compat marker class.
 
     Issue #43: ``MoneyforwardBase.login_flow`` now drives both mf and
-    partner-portal logins by branching on ``variant.is_partner_portal``
-    and navigating directly to ``variant.login_url``. This mixin no
-    longer needs to override ``login_flow``; it remains as a marker
-    class so existing ``isinstance(spider, XMoneyforwardLoginMixin)``
-    checks keep working.
+    partner-portal logins by navigating directly to ``variant.login_url``
+    and probing for the password field to auto-detect 1-page vs 2-page
+    form layout. This mixin no longer needs to override ``login_flow``;
+    it remains as a marker so existing
+    ``isinstance(spider, XMoneyforwardLoginMixin)`` checks keep working.
     """
