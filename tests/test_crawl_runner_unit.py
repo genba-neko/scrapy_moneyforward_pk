@@ -444,6 +444,13 @@ def test_run_all_marks_session_expiry_as_failed() -> None:
         assert results[inv] == "failed: SessionExpired", inv
 
 
+def test_classify_result_marks_months_failed_as_partial() -> None:
+    assert (
+        _classify_result("transaction", {"transaction/months_failed": 1})
+        == "failed: PartialMonthFetch"
+    )
+
+
 def test_classify_result_marks_playwright_errback_failed() -> None:
     assert (
         _classify_result("transaction", {"transaction/playwright/errback": 1})

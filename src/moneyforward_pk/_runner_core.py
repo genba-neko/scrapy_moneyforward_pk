@@ -361,6 +361,8 @@ def _classify_result(spider_type: str, stats_snapshot: dict) -> str:
     )
     if any(int(stats_snapshot.get(k, 0) or 0) > 0 for k in permanent_keys):
         return "failed: SessionExpired"
+    if int(stats_snapshot.get(f"{spider_type}/months_failed", 0) or 0) > 0:
+        return "failed: PartialMonthFetch"
     if int(stats_snapshot.get(f"{spider_type}/playwright/errback", 0) or 0) > 0:
         return "failed: PlaywrightError"
     if any(

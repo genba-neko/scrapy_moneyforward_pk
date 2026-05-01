@@ -74,15 +74,19 @@ class MfTransactionSpider(MoneyforwardBase):
             try:
                 await p.click(".fc-button-selectMonth", timeout=30_000)
                 await p.click(f'li[data-year="{year}"]', timeout=30_000)
-                await p.click(
-                    f'li[data-year="{year}"][data-month="{month}"]',
-                    timeout=30_000,
+                # 前年/別年の li が同じ DOM に残り pointer event を吸うため、
+                # :visible で見えてる li のみ対象にして wait→click する。
+                month_li = p.locator(
+                    f'li[data-year="{year}"][data-month="{month}"]:visible'
                 )
+                await month_li.wait_for(state="visible", timeout=10_000)
+                await month_li.click(timeout=10_000)
                 await p.wait_for_load_state("networkidle")
             except Exception as exc:  # noqa: BLE001
                 self.logger.warning(
                     "Month switcher failed (%d/%d): %s", year, month, exc
                 )
+                self._inc_stat(f"{self.name}/months_failed")
                 return
 
             html = await p.content()
