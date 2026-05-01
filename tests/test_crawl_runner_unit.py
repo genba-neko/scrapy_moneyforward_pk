@@ -220,6 +220,22 @@ def test_initialize_output_files_truncates_existing(tmp_path: Path) -> None:
     assert pre.read_text(encoding="utf-8") == "["
 
 
+def test_initialize_output_files_only_touches_requested_types(tmp_path: Path) -> None:
+    transaction = tmp_path / "moneyforward_transaction.json"
+    account = tmp_path / "moneyforward_account.json"
+    asset = tmp_path / "moneyforward_asset_allocation.json"
+    transaction.write_text('[{"keep": "transaction"}]', encoding="utf-8")
+    account.write_text('[{"old": "account"}]', encoding="utf-8")
+    asset.write_text('[{"keep": "asset"}]', encoding="utf-8")
+
+    paths = initialize_output_files(tmp_path, ("account",))
+
+    assert set(paths) == {"account"}
+    assert transaction.read_text(encoding="utf-8") == '[{"keep": "transaction"}]'
+    assert account.read_text(encoding="utf-8") == "["
+    assert asset.read_text(encoding="utf-8") == '[{"keep": "asset"}]'
+
+
 def test_finalize_output_files_appends_closing_bracket(tmp_path: Path) -> None:
     initialize_output_files(tmp_path)
     finalize_output_files(tmp_path)
@@ -241,6 +257,21 @@ def test_finalize_output_files_with_items_is_valid_json(tmp_path: Path) -> None:
     finalize_output_files(tmp_path)
     text = p.read_text(encoding="utf-8")
     assert json.loads(text) == [{"a": 1}, {"b": 2}]
+
+
+def test_finalize_output_files_only_touches_requested_types(tmp_path: Path) -> None:
+    transaction = tmp_path / "moneyforward_transaction.json"
+    account = tmp_path / "moneyforward_account.json"
+    asset = tmp_path / "moneyforward_asset_allocation.json"
+    transaction.write_text('[{"keep": "transaction"}]', encoding="utf-8")
+    account.write_text('[{"new": "account"}', encoding="utf-8")
+    asset.write_text('[{"keep": "asset"}]', encoding="utf-8")
+
+    finalize_output_files(tmp_path, ("account",))
+
+    assert transaction.read_text(encoding="utf-8") == '[{"keep": "transaction"}]'
+    assert json.loads(account.read_text(encoding="utf-8")) == [{"new": "account"}]
+    assert asset.read_text(encoding="utf-8") == '[{"keep": "asset"}]'
 
 
 # --------------------------------------------------------------- summarize

@@ -154,7 +154,8 @@ def _run(args: argparse.Namespace) -> int:
     settings = get_project_settings()
     default_dir = Path(settings.get("OUTPUT_DIR_DEFAULT", "runtime/output"))
     output_dir = resolve_output_dir(settings.get("OUTPUT_DIR", ""), default_dir)
-    initialize_output_files(output_dir)
+    target_spider_types = tuple(dict.fromkeys(inv.spider_type for inv in invocations))
+    initialize_output_files(output_dir, target_spider_types)
 
     results: dict = {}
     started_at = time.monotonic()
@@ -171,7 +172,7 @@ def _run(args: argparse.Namespace) -> int:
         )
         reactor.run()  # type: ignore[attr-defined]
     finally:
-        finalize_output_files(output_dir)
+        finalize_output_files(output_dir, target_spider_types)
 
     elapsed = time.monotonic() - started_at
     summary = summarize(results, elapsed)

@@ -14,6 +14,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 import yaml
 
@@ -164,13 +165,29 @@ def list_invocations(
     return invocations
 
 
-def initialize_output_files(output_dir: Path) -> dict[str, Path]:
-    """3 ファイルを ``[`` で初期化 (truncate). run_all 開始前に呼ぶ.
+def _target_spider_types(spider_types: Iterable[str] | None = None) -> tuple[str, ...]:
+    """Return validated spider types to touch for output file operations."""
+    if spider_types is None:
+        return SPIDER_TYPES
+
+    targets = tuple(dict.fromkeys(spider_types))
+    unknown = sorted(set(targets) - set(SPIDER_TYPES))
+    if unknown:
+        raise KeyError(f"unknown spider type(s): {unknown!r}")
+    return targets
+
+
+def initialize_output_files(
+    output_dir: Path, spider_types: Iterable[str] | None = None
+) -> dict[str, Path]:
+    """対象ファイルを ``[`` で初期化 (truncate). run_all 開始前に呼ぶ.
 
     Parameters
     ----------
     output_dir : Path
         出力ディレクトリ. 存在しなければ作成する.
+    spider_types : iterable of str, optional
+        初期化対象の spider 種別. 省略時は従来通り 3 種別すべて.
 
     Returns
     -------
@@ -179,22 +196,26 @@ def initialize_output_files(output_dir: Path) -> dict[str, Path]:
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     paths: dict[str, Path] = {}
-    for spider_type in SPIDER_TYPES:
+    for spider_type in _target_spider_types(spider_types):
         path = output_dir / OUTPUT_FILENAME_TEMPLATE.format(spider_type=spider_type)
         path.write_text("[", encoding="utf-8")
         paths[spider_type] = path
     return paths
 
 
-def finalize_output_files(output_dir: Path) -> None:
-    """3 ファイルに ``]`` を追記して JSON 配列として valid にする.
+def finalize_output_files(
+    output_dir: Path, spider_types: Iterable[str] | None = None
+) -> None:
+    """対象ファイルに ``]`` を追記して JSON 配列として valid にする.
 
     Parameters
     ----------
     output_dir : Path
         出力ディレクトリ.
+    spider_types : iterable of str, optional
+        finalize 対象の spider 種別. 省略時は従来通り 3 種別すべて.
     """
-    for spider_type in SPIDER_TYPES:
+    for spider_type in _target_spider_types(spider_types):
         path = output_dir / OUTPUT_FILENAME_TEMPLATE.format(spider_type=spider_type)
         if not path.exists():
             continue
