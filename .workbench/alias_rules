@@ -10,9 +10,11 @@ format        $VENV_PYTHON -m ruff format . ; $VENV_PYTHON -m ruff check --fix .
 lint          $VENV_PYTHON -m pyright ; $VENV_PYTHON -m ruff check .  # 型チェック → lint
 test-unit     $VENV_PYTHON -m pytest -k unit @args  # unit テストのみ実行
 test-all      $VENV_PYTHON -m pytest @args  # 全テスト実行
-test-full     $VENV_PYTHON -m pytest  --cov --cov-report=term-missing @args  # カバレッジ付き
-crawl-list    cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.crawl_runner --list @args  # 起動予定一覧 (実行しない)
-crawl         cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.crawl_runner @args  # crawl_runner 実行 (--site / --type で絞り込み可)
-crawl-trans   cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.crawl_runner --type transaction @args  # transaction のみ全 site/account
-crawl-asset   cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.crawl_runner --type asset_allocation @args  # asset_allocation のみ全 site/account
-crawl-acct    cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.crawl_runner --type account @args  # account のみ全 site/account
+test-full     $VENV_PYTHON -m pytest --cov --cov-report=term-missing @args  # カバレッジ付き
+
+crawl-list    cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat all --list @args  # WSL 経由で起動予定一覧 (実行しない)
+crawl         cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat all @args  # WSL 経由で crawl_runner 実行 (--site で絞り込み可)
+crawl-trans   cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat transaction @args  # WSL 経由で transaction のみ実行
+crawl-asset   cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat asset @args  # WSL 経由で asset_allocation のみ実行
+crawl-acct    cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat account @args  # WSL 経由で account のみ実行
+wslrun        cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat @args  # WSL 経由で job_runner.sh を実行
