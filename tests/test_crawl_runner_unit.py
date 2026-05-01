@@ -13,6 +13,7 @@ from moneyforward_pk._runner_core import (
     SPIDER_TYPES,
     Account,
     Invocation,
+    _classify_result,
     exit_code,
     finalize_output_files,
     initialize_output_files,
@@ -311,6 +312,23 @@ def test_summarize_is_json_serializable() -> None:
     json.dumps(s)
 
 
+def test_summarize_marks_missing_planned_invocations_failed() -> None:
+    finished = _inv("mf", "transaction", "a@x.com")
+    pending = _inv("mf", "account", "a@x.com")
+
+    s = summarize(
+        {finished: "succeeded"},
+        elapsed_sec=12.3,
+        invocations=[finished, pending],
+    )
+
+    assert s["total"] == 2
+    assert s["succeeded"] == 1
+    assert s["failed"] == {
+        "mf_account_a@x.com": "failed: NotCompleted",
+    }
+
+
 # --------------------------------------------------------------- exit_code
 
 
@@ -424,6 +442,24 @@ def test_run_all_marks_session_expiry_as_failed() -> None:
 
     for inv in invs:
         assert results[inv] == "failed: SessionExpired", inv
+
+
+def test_classify_result_marks_playwright_errback_failed() -> None:
+    assert (
+        _classify_result("transaction", {"transaction/playwright/errback": 1})
+        == "failed: PlaywrightError"
+    )
+
+
+def test_classify_result_marks_playwright_downloader_exception_failed() -> None:
+    status = _classify_result(
+        "transaction",
+        {
+            "downloader/exception_type_count/playwright._impl._errors.TargetClosedError": 1
+        },
+    )
+
+    assert status == "failed: PlaywrightError"
 
 
 def test_run_all_marks_init_failure_for_all_invocations() -> None:

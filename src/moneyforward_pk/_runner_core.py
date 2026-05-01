@@ -223,7 +223,11 @@ def finalize_output_files(
             fh.write("]")
 
 
-def summarize(results: dict[Invocation, str], elapsed_sec: float) -> dict:
+def summarize(
+    results: dict[Invocation, str],
+    elapsed_sec: float,
+    invocations: Iterable[Invocation] | None = None,
+) -> dict:
     """サマリを構造化 dict で返す (JSON serializable).
 
     Parameters
@@ -232,18 +236,21 @@ def summarize(results: dict[Invocation, str], elapsed_sec: float) -> dict:
         invocation → status (``"succeeded"`` or ``"failed: ..."``).
     elapsed_sec : float
         run_all の実行秒数.
+    invocations : iterable of Invocation, optional
+        起動予定の全 invocation. 指定時は未完了 invocation も失敗として集計する.
 
     Returns
     -------
     dict
         集計結果.
     """
-    total = len(results)
-    succeeded = sum(1 for s in results.values() if s == "succeeded")
+    planned = tuple(invocations) if invocations is not None else tuple(results)
+    total = len(planned)
+    succeeded = sum(1 for inv in planned if results.get(inv) == "succeeded")
     failed = {
         f"{inv.site}_{inv.spider_type}_{inv.user}": status
-        for inv, status in results.items()
-        if status != "succeeded"
+        for inv in planned
+        if (status := results.get(inv, "failed: NotCompleted")) != "succeeded"
     }
     return {
         "total": total,
@@ -354,6 +361,14 @@ def _classify_result(spider_type: str, stats_snapshot: dict) -> str:
     )
     if any(int(stats_snapshot.get(k, 0) or 0) > 0 for k in permanent_keys):
         return "failed: SessionExpired"
+    if int(stats_snapshot.get(f"{spider_type}/playwright/errback", 0) or 0) > 0:
+        return "failed: PlaywrightError"
+    if any(
+        key.startswith("downloader/exception_type_count/playwright.")
+        and int(value or 0) > 0
+        for key, value in stats_snapshot.items()
+    ):
+        return "failed: PlaywrightError"
     return "succeeded"
 
 

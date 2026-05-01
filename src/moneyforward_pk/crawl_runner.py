@@ -175,7 +175,7 @@ def _run(args: argparse.Namespace) -> int:
         finalize_output_files(output_dir, target_spider_types)
 
     elapsed = time.monotonic() - started_at
-    summary = summarize(results, elapsed)
+    summary = summarize(results, elapsed, invocations)
     _print_summary(summary)
     return exit_code(summary)
 
