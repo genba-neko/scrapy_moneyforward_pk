@@ -21,8 +21,9 @@ from moneyforward_pk.utils.playwright_utils import (
 class MfAccountSpider(MoneyforwardBase):
     """Visit /accounts, trigger updates, poll until no 更新中 remain."""
 
-    name = "mf_account"
-    variant_name = "mf"
+    name = "account"
+    spider_type = "account"
+    variant_name = "mf"  # default; overridden via ``site`` kwarg
     update_wait_seconds = 20
     update_max_retry = 5
 

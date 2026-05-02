@@ -48,6 +48,7 @@ scheduled_tasks.lock
 # -----------------------------------------------------------------------------
 # Secrets / credentials
 # Issue #43: per-site/per-account login credentials live in config/.
+# Issue #40: crawl runner reads accounts.yaml for orchestration.
 # Only the *.example.yaml templates may be committed.
 # -----------------------------------------------------------------------------
 config/accounts.yaml

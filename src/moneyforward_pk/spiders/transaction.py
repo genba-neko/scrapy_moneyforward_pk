@@ -25,8 +25,9 @@ class MfTransactionSpider(MoneyforwardBase):
     ``past_months`` controls the depth (default from ``SITE_PAST_MONTHS``).
     """
 
-    name = "mf_transaction"
-    variant_name = "mf"
+    name = "transaction"
+    spider_type = "transaction"
+    variant_name = "mf"  # default; overridden via ``site`` kwarg
 
     def __init__(self, *args, past_months: int | str | None = None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -73,15 +74,28 @@ class MfTransactionSpider(MoneyforwardBase):
             try:
                 await p.click(".fc-button-selectMonth", timeout=30_000)
                 await p.click(f'li[data-year="{year}"]', timeout=30_000)
-                await p.click(
-                    f'li[data-year="{year}"][data-month="{month}"]',
-                    timeout=30_000,
+                # 年クリック → 月一覧再描画の完了を offsetParent で確認 (DOM 安定化)。
+                # E2E 観測 (2026-05-02): scroll-into-view 後に element が hidden 化
+                # する競合を避けるため、 click ではなく dispatch_event("click") で
+                # MouseEvent を直接 dispatch する (bbox/scroll 不要、 force=True と
+                # 異なり座標が無くても発火可能)。 :visible filter は前年要素の
+                # 誤発火を防ぐため引き続き使用、 click 直前に locator を再解決する。
+                await p.wait_for_function(
+                    "(sel) => Array.from(document.querySelectorAll(sel))"
+                    ".some(el => el.offsetParent !== null)",
+                    arg=f'li[data-year="{year}"][data-month="{month}"]',
+                    timeout=10_000,
                 )
+                month_li = p.locator(
+                    f'li[data-year="{year}"][data-month="{month}"]:visible'
+                ).first
+                await month_li.dispatch_event("click")
                 await p.wait_for_load_state("networkidle")
             except Exception as exc:  # noqa: BLE001
                 self.logger.warning(
                     "Month switcher failed (%d/%d): %s", year, month, exc
                 )
+                self._inc_stat(f"{self.name}/months_failed")
                 return
 
             html = await p.content()

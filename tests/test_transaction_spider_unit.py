@@ -76,16 +76,27 @@ def test_parse_month_returns_early_without_page():
     assert _drive(gather()) == []
 
 
+def _mk_month_locator() -> MagicMock:
+    """Return a Locator-like mock supporting .first + dispatch_event."""
+    locator = MagicMock()
+    locator.first = locator
+    locator.dispatch_event = AsyncMock()
+    return locator
+
+
 def test_parse_month_yields_items_after_switcher_succeeds():
-    """Happy path: month switcher clicks succeed and items are yielded."""
+    """Happy path: month switcher dispatch_event succeeds and items are yielded."""
     spider = MfTransactionSpider()
     crawler = MagicMock()
     crawler.stats = MagicMock()
     spider.crawler = crawler
 
+    locator = _mk_month_locator()
     page = MagicMock()
     page.wait_for_load_state = AsyncMock()
+    page.wait_for_function = AsyncMock()
     page.click = AsyncMock()
+    page.locator = MagicMock(return_value=locator)
     page.content = AsyncMock(return_value=_FIXTURE_HTML)
     response = _mk_response(_FIXTURE_HTML, page=page)
 
@@ -97,10 +108,12 @@ def test_parse_month_yields_items_after_switcher_succeeds():
     assert items[0]["amount_number"] == -200
     assert items[0]["year_month"] == "202501"
     crawler.stats.inc_value.assert_any_call(f"{spider.name}/records", count=1)
+    page.locator.assert_called_once_with('li[data-year="2025"][data-month="1"]:visible')
+    locator.dispatch_event.assert_called_once_with("click")
 
 
 def test_parse_month_aborts_when_switcher_throws():
-    """A click failure must abort the month silently (no items yielded)."""
+    """A click failure must abort the month, bump months_failed, no items."""
     spider = MfTransactionSpider()
     crawler = MagicMock()
     crawler.stats = MagicMock()
@@ -108,7 +121,9 @@ def test_parse_month_aborts_when_switcher_throws():
 
     page = MagicMock()
     page.wait_for_load_state = AsyncMock()
+    page.wait_for_function = AsyncMock()
     page.click = AsyncMock(side_effect=RuntimeError("month-switcher down"))
+    page.locator = MagicMock(return_value=_mk_month_locator())
     page.content = AsyncMock(return_value=_FIXTURE_HTML)
     response = _mk_response(_FIXTURE_HTML, page=page)
 
@@ -119,6 +134,33 @@ def test_parse_month_aborts_when_switcher_throws():
     # records counter must not be bumped when the month was skipped.
     inc_keys = [c.args[0] for c in crawler.stats.inc_value.call_args_list]
     assert f"{spider.name}/records" not in inc_keys
+    # months_failed counter must be bumped so summary classifies as partial.
+    crawler.stats.inc_value.assert_any_call(f"{spider.name}/months_failed", count=1)
+
+
+def test_parse_month_aborts_when_dom_stabilization_times_out():
+    """If wait_for_function (DOM 安定化) times out, abort + bump months_failed."""
+    spider = MfTransactionSpider()
+    crawler = MagicMock()
+    crawler.stats = MagicMock()
+    spider.crawler = crawler
+
+    locator = _mk_month_locator()
+    page = MagicMock()
+    page.wait_for_load_state = AsyncMock()
+    page.wait_for_function = AsyncMock(side_effect=RuntimeError("Timeout 10000ms"))
+    page.click = AsyncMock()
+    page.locator = MagicMock(return_value=locator)
+    page.content = AsyncMock(return_value=_FIXTURE_HTML)
+    response = _mk_response(_FIXTURE_HTML, page=page)
+
+    async def gather():
+        return await _collect(spider.parse_month(response, year=2025, month=10))
+
+    assert _drive(gather()) == []
+    # dispatch_event must not be invoked when DOM stabilization fails.
+    locator.dispatch_event.assert_not_called()
+    crawler.stats.inc_value.assert_any_call(f"{spider.name}/months_failed", count=1)
 
 
 def test_from_crawler_pulls_past_months_from_settings():

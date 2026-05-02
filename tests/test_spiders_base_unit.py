@@ -9,7 +9,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 import scrapy
-from scrapy.http import HtmlResponse, Request, Response
+from scrapy.http import Request, Response
 
 from moneyforward_pk.spiders.base.moneyforward_base import MoneyforwardBase
 
@@ -246,40 +246,8 @@ def test_parse_after_login_missing_page_logs_and_returns():
     assert result == []
 
 
-def test_parse_after_login_passes_login_attempt_to_login_flow():
-    """moneyforward_login_attempt meta must reach login_flow as kwarg."""
-    spider = _build_spider()
-    captured: dict[str, int] = {}
-
-    async def fake_login_flow(_page, *, login_attempt: int = 0) -> None:
-        captured["attempt"] = login_attempt
-
-    spider.login_flow = fake_login_flow  # type: ignore[method-assign]
-
-    page = MagicMock()
-    page.unroute = MagicMock(return_value=_NoopAwaitable())
-    page.close = MagicMock(return_value=_NoopAwaitable())
-    page.url = "https://moneyforward.com/home"
-    page.title = MagicMock(return_value=_value_awaitable("Home"))
-    page.content = MagicMock(return_value=_value_awaitable("<html></html>"))
-
-    request = Request(
-        url="https://moneyforward.com/",
-        meta={"playwright_page": page, "moneyforward_login_attempt": 2},
-    )
-    response = HtmlResponse(
-        url=request.url,
-        request=request,
-        body=b"<html><head><title>Home</title></head></html>",
-    )
-    response.meta["playwright_page"] = page
-    response.meta["moneyforward_login_attempt"] = 2
-
-    async def gather():
-        return await spider._parse_after_login(response)
-
-    _drive(gather())
-    assert captured["attempt"] == 2
+# test_parse_after_login_passes_login_attempt_to_login_flow was removed
+# along with the alt-as-retry feature (Issue #40 / PR consolidation).
 
 
 class _ValueAwaitable:

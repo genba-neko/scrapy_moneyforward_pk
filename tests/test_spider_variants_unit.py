@@ -1,11 +1,10 @@
-"""spiders.variants registry および xmf_ssnb 雛形 spider のテスト."""
+"""spiders.variants registry および 3 generic spider の variant 解決テスト."""
 
 from __future__ import annotations
 
 import pytest
 
 from moneyforward_pk.spiders.variants import VARIANTS, VariantConfig, get_variant
-from moneyforward_pk.spiders.xmf_ssnb_transaction import XmfSsnbTransactionSpider
 
 
 def test_variant_config_is_frozen():
@@ -21,7 +20,7 @@ def test_variants_contains_mf_and_ssnb():
 
 
 def test_variants_contains_all_legacy_partner_sites():
-    """元 PJ の 8 派生サイト + mf 本体 + xmf_ssnb = 10 variant 登録済."""
+    """元 PJ の 8 派生サイト + mf 本体 + xmf 一般 + xmf_ssnb = 11 variant 登録済."""
     expected = {
         "mf",
         "xmf",
@@ -44,7 +43,6 @@ def test_each_variant_url_consistency(variant_name: str):
     base_host = cfg.base_url.replace("https://", "").rstrip("/")
     for url in (cfg.accounts_url, cfg.transactions_url, cfg.asset_allocation_url):
         assert base_host in url, f"{variant_name}: {url} not under {base_host}"
-    # mf のみ mfid_user, それ以外は sign_in_session_service.
     if variant_name == "mf":
         assert cfg.login_form_email == "mfid_user[email]"
         assert cfg.is_partner_portal is False
@@ -53,157 +51,77 @@ def test_each_variant_url_consistency(variant_name: str):
         assert cfg.is_partner_portal is True
 
 
-def test_mf_variant_matches_legacy_urls():
-    cfg = get_variant("mf")
-    assert cfg.base_url == "https://moneyforward.com/"
-    assert cfg.transactions_url == "https://moneyforward.com/cf"
-    assert cfg.is_partner_portal is False
-    assert cfg.login_form_email == "mfid_user[email]"
-
-
-def test_xmf_ssnb_uses_partner_portal_form():
-    cfg = get_variant("xmf_ssnb")
-    assert cfg.is_partner_portal is True
-    assert cfg.login_form_email == "sign_in_session_service[email]"
-    assert "ssnb.x.moneyforward.com" in cfg.base_url
-
-
 def test_get_variant_unknown_raises_keyerror():
     with pytest.raises(KeyError, match="unknown variant"):
         get_variant("does_not_exist")
 
 
-def test_xmf_ssnb_spider_resolves_variant():
-    spider = XmfSsnbTransactionSpider()
-    assert spider.name == "xmf_ssnb_transaction"
-    assert spider.variant.name == "xmf_ssnb"
-    assert spider.is_partner_portal is True
-    assert spider.start_url == "https://ssnb.x.moneyforward.com/"
+# --------------------------------------- 3 generic spider classes (T3 後)
 
 
-def test_xmf_ssnb_spider_inherits_login_mixin_and_base():
-    """既存 MfTransactionSpider 機能と XMoneyforwardLoginMixin の両方を継承."""
-    from moneyforward_pk.spiders.base.moneyforward_base import (
-        MoneyforwardBase,
-        XMoneyforwardLoginMixin,
-    )
-    from moneyforward_pk.spiders.transaction import MfTransactionSpider
-
-    assert issubclass(XmfSsnbTransactionSpider, MfTransactionSpider)
-    assert issubclass(XmfSsnbTransactionSpider, MoneyforwardBase)
-    assert issubclass(XmfSsnbTransactionSpider, XMoneyforwardLoginMixin)
-
-
-def test_mf_transaction_spider_uses_variant_url():
-    """``MfTransactionSpider`` は variant.transactions_url を request URL に使う."""
+def test_transaction_spider_default_resolves_mf():
+    """site 省略時は ``variant_name = "mf"`` をデフォルトに解決."""
     from moneyforward_pk.spiders.transaction import MfTransactionSpider
 
     spider = MfTransactionSpider()
-    req = spider._month_request(2025, 1)
-    assert req.url == "https://moneyforward.com/cf"
+    assert spider.name == "transaction"
+    assert spider.spider_type == "transaction"
+    assert spider.variant.name == "mf"
+    assert spider.is_partner_portal is False
+    assert spider.start_url == "https://moneyforward.com/"
     assert spider.allowed_domains == ["moneyforward.com"]
 
 
-def test_mf_account_spider_uses_variant_url():
-    """``MfAccountSpider`` は variant.accounts_url を request URL に使う."""
-    from moneyforward_pk.spiders.account import MfAccountSpider
+def test_transaction_spider_with_site_kwarg_targets_partner_portal():
+    """``site`` kwarg で xmf_ssnb 等の派生サイト URL に切替."""
+    from moneyforward_pk.spiders.transaction import MfTransactionSpider
 
-    spider = MfAccountSpider()
-    req = spider._accounts_request(is_update=False, attempt=0)
-    assert req.url == "https://moneyforward.com/accounts"
-    assert spider.allowed_domains == ["moneyforward.com"]
-
-
-def test_xmf_ssnb_transaction_uses_partner_url():
-    """xmf_ssnb spider は ssnb.x.moneyforward.com 配下の URL を発行する."""
-    spider = XmfSsnbTransactionSpider()
+    spider = MfTransactionSpider(site="xmf_ssnb")
+    assert spider.variant.name == "xmf_ssnb"
+    assert spider.is_partner_portal is True
+    assert spider.start_url == "https://ssnb.x.moneyforward.com/"
+    assert spider.allowed_domains == ["ssnb.x.moneyforward.com"]
     req = spider._month_request(2025, 1)
     assert req.url == "https://ssnb.x.moneyforward.com/cf"
-    assert spider.allowed_domains == ["ssnb.x.moneyforward.com"]
-    assert spider.start_url == "https://ssnb.x.moneyforward.com/"
 
 
-# 派生サイト 8 系統 (xmf 含む) × 3 spider type の登録確認.
-_DERIVED_VARIANTS = [
-    "xmf",
-    "xmf_mizuho",
-    "xmf_jabank",
-    "xmf_smtb",
-    "xmf_linkx",
-    "xmf_okashin",
-    "xmf_shiga",
-    "xmf_shiz",
-]
+def test_account_spider_with_site_kwarg():
+    from moneyforward_pk.spiders.account import MfAccountSpider
 
-
-@pytest.mark.parametrize("variant_name", _DERIVED_VARIANTS)
-def test_derived_transaction_spider_registers(variant_name: str):
-    """各派生サイトの transaction spider が import 可能で variant URL を解決."""
-    module = __import__(
-        f"moneyforward_pk.spiders.{variant_name}_transaction",
-        fromlist=["*"],
-    )
-    spider_cls_name = next(
-        n
-        for n in dir(module)
-        if n.endswith("TransactionSpider") and n != "MfTransactionSpider"
-    )
-    spider = getattr(module, spider_cls_name)()
-    assert spider.name == f"{variant_name}_transaction"
-    assert spider.variant.name == variant_name
-    req = spider._month_request(2025, 1)
-    assert variant_name.replace("xmf_", "").replace(
-        "xmf", "x"
-    ) in req.url or req.url.startswith(spider.variant.base_url)
-
-
-@pytest.mark.parametrize("variant_name", _DERIVED_VARIANTS)
-def test_derived_account_spider_registers(variant_name: str):
-    module = __import__(
-        f"moneyforward_pk.spiders.{variant_name}_account",
-        fromlist=["*"],
-    )
-    spider_cls_name = next(
-        n for n in dir(module) if n.endswith("AccountSpider") and n != "MfAccountSpider"
-    )
-    spider = getattr(module, spider_cls_name)()
-    assert spider.name == f"{variant_name}_account"
-    assert spider.variant.name == variant_name
+    spider = MfAccountSpider(site="xmf_mizuho")
+    assert spider.name == "account"
+    assert spider.spider_type == "account"
+    assert spider.variant.name == "xmf_mizuho"
     req = spider._accounts_request(is_update=False, attempt=0)
-    assert req.url == spider.variant.accounts_url
+    assert req.url == "https://mizuho.x.moneyforward.com/accounts"
 
 
-@pytest.mark.parametrize("variant_name", _DERIVED_VARIANTS)
-def test_derived_asset_allocation_spider_registers(variant_name: str):
-    module = __import__(
-        f"moneyforward_pk.spiders.{variant_name}_asset_allocation",
-        fromlist=["*"],
+def test_asset_allocation_spider_with_site_kwarg():
+    from moneyforward_pk.spiders.asset_allocation import MfAssetAllocationSpider
+
+    spider = MfAssetAllocationSpider(site="xmf_jabank")
+    assert spider.name == "asset_allocation"
+    assert spider.spider_type == "asset_allocation"
+    assert spider.variant.name == "xmf_jabank"
+
+
+def test_spider_login_credentials_kwargs_override_settings():
+    """``login_user`` / ``login_pass`` kwarg で settings.py の env 値を上書き."""
+    from moneyforward_pk.spiders.transaction import MfTransactionSpider
+
+    spider = MfTransactionSpider(
+        site="mf",
+        login_user="kwargs@example.com",
+        login_pass="kwargs-pw",  # noqa: S106
     )
-    spider_cls_name = next(
-        n
-        for n in dir(module)
-        if n.endswith("AssetAllocationSpider") and n != "MfAssetAllocationSpider"
-    )
-    spider = getattr(module, spider_cls_name)()
-    assert spider.name == f"{variant_name}_asset_allocation"
-    assert spider.variant.name == variant_name
+    assert spider.login_user == "kwargs@example.com"
+    assert spider.login_pass == "kwargs-pw"
 
 
-def test_scrapy_loader_lists_all_thirty_spiders():
-    """``scrapy list`` 相当の SpiderLoader で 30 spider 全数登録を確認."""
-    from scrapy.settings import Settings
-    from scrapy.spiderloader import SpiderLoader
-
-    settings = Settings({"SPIDER_MODULES": ["moneyforward_pk.spiders"]})
-    loader = SpiderLoader.from_settings(settings)
-    names = set(loader.list())
-    # 10 variant × 3 spider type = 30
-    assert len(names) >= 30
-    # mf / xmf / xmf_ssnb / 7 派生 = 10 variants. 各 transaction が必須.
-    for variant in [
-        "mf",
+@pytest.mark.parametrize(
+    "variant_name",
+    [
         "xmf",
-        "xmf_ssnb",
         "xmf_mizuho",
         "xmf_jabank",
         "xmf_smtb",
@@ -211,7 +129,25 @@ def test_scrapy_loader_lists_all_thirty_spiders():
         "xmf_okashin",
         "xmf_shiga",
         "xmf_shiz",
-    ]:
-        assert f"{variant}_transaction" in names
-        assert f"{variant}_account" in names
-        assert f"{variant}_asset_allocation" in names
+    ],
+)
+def test_each_partner_variant_resolves_through_transaction_spider(variant_name: str):
+    """派生サイトの URL/フォームが registry 経由で取得可能."""
+    from moneyforward_pk.spiders.transaction import MfTransactionSpider
+
+    spider = MfTransactionSpider(site=variant_name)
+    assert spider.variant.name == variant_name
+    assert spider.is_partner_portal is True
+    req = spider._month_request(2025, 1)
+    assert req.url == spider.variant.transactions_url
+
+
+def test_scrapy_loader_lists_three_generic_spiders():
+    """SpiderLoader で 3 spider (transaction / account / asset_allocation) を解決."""
+    from scrapy.settings import Settings
+    from scrapy.spiderloader import SpiderLoader
+
+    settings = Settings({"SPIDER_MODULES": ["moneyforward_pk.spiders"]})
+    loader = SpiderLoader.from_settings(settings)
+    names = set(loader.list())
+    assert names == {"transaction", "account", "asset_allocation"}
