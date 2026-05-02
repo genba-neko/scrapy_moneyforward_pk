@@ -1,5 +1,7 @@
 # PR #40 E2E 検証で判明した残不具合 (3件)
 
+[完了 PR#47 2026-05-02]
+
 作成: 2026-04-29 21:58
 ブランチ: (新規ブランチ未切り出し / 起点 `feat/40_variant_orchestrator`)
 関連 PR: #47 (feat/40_variant_orchestrator)
