@@ -49,7 +49,9 @@ def parse_sbisec_transfer_tax_detail(rows: Iterable[list[str]]) -> dict[str, int
             last_key = key
         elif len(row) == 13 and "税徴収額" in row[0] and last_key is not None:
             # 税徴収行は前行の配当に紐づく扱い (元 PJ 仕様)
-            tax[last_key] = tax.get(last_key, 0) + _safe_int(row[11]) + _safe_int(row[12])
+            tax[last_key] = (
+                tax.get(last_key, 0) + _safe_int(row[11]) + _safe_int(row[12])
+            )
     return _net_income(income, tax)
 
 
@@ -72,7 +74,11 @@ def parse_sbisec_withdrawal_detail(rows: Iterable[list[str]]) -> dict[str, int]:
     """SBI 証券「入出金明細」CSV → 月次配当 dict (税は引かれない)."""
     income: dict[str, int] = {}
     for row in rows:
-        if len(row) == 7 and row[1] == "入金" and ("配当金" in row[2] or "貸株金利" in row[2]):
+        if (
+            len(row) == 7
+            and row[1] == "入金"
+            and ("配当金" in row[2] or "貸株金利" in row[2])
+        ):
             try:
                 key = _to_year_month(row[0], "%Y/%m/%d")
             except ValueError:
