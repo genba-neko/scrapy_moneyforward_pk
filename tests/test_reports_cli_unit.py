@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import shutil
+import json
 from pathlib import Path
 
 import pytest
 
+from moneyforward_pk.reports._loader import iter_jsonl
 from moneyforward_pk.reports.cli import main
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "reports"
@@ -14,18 +15,18 @@ FIXTURE_DIR = Path(__file__).parent / "fixtures" / "reports"
 
 @pytest.fixture
 def transaction_dir(tmp_path: Path) -> Path:
-    """JSONL fixture を spider 名 prefix にリネームした作業ディレクトリ。"""
-    src = FIXTURE_DIR / "sample_transactions.jsonl"
-    dst = tmp_path / "mf_transaction_20260425.jsonl"
-    shutil.copyfile(src, dst)
+    """JSONL fixture を新形式 moneyforward_transaction.json (JSON 配列) に変換した作業ディレクトリ。"""
+    records = list(iter_jsonl(FIXTURE_DIR / "sample_transactions.jsonl"))
+    dst = tmp_path / "moneyforward_transaction.json"
+    dst.write_text(json.dumps(records), encoding="utf-8")
     return tmp_path
 
 
 @pytest.fixture
 def asset_allocation_dir(tmp_path: Path) -> Path:
-    src = FIXTURE_DIR / "sample_asset_allocation.jsonl"
-    dst = tmp_path / "mf_asset_allocation_20260425.jsonl"
-    shutil.copyfile(src, dst)
+    records = list(iter_jsonl(FIXTURE_DIR / "sample_asset_allocation.jsonl"))
+    dst = tmp_path / "moneyforward_asset_allocation.json"
+    dst.write_text(json.dumps(records), encoding="utf-8")
     return tmp_path
 
 

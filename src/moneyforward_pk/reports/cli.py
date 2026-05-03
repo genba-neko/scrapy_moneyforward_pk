@@ -21,7 +21,7 @@ from moneyforward_pk.reports import balances as bal_mod
 from moneyforward_pk.reports._loader import (
     filter_year_month,
     filter_year_month_day,
-    load_spider_jsonl,
+    load_output_json,
 )
 from moneyforward_pk.utils.slack_notifier import SlackNotifier
 
@@ -71,7 +71,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _cmd_balances(args: argparse.Namespace) -> str:
-    items = list(load_spider_jsonl(args.input_dir, "mf_transaction"))
+    items = list(load_output_json(args.input_dir, "transaction"))
     monthly = list(filter_year_month(items, args.year, args.month))
     aggregated = bal_mod.aggregate_balances(monthly)
     return bal_mod.report_message(
@@ -80,14 +80,14 @@ def _cmd_balances(args: argparse.Namespace) -> str:
 
 
 def _cmd_asset_allocation(args: argparse.Namespace) -> str:
-    items = list(load_spider_jsonl(args.input_dir, "mf_asset_allocation"))
+    items = list(load_output_json(args.input_dir, "asset_allocation"))
     daily = list(filter_year_month_day(items, args.year, args.month, args.day))
     aggregated = aa_mod.aggregate_asset_allocation(daily)
     return aa_mod.report_message(aggregated, args.year, args.month, args.day)
 
 
 def _cmd_balances_csv(args: argparse.Namespace) -> str:
-    items = list(load_spider_jsonl(args.input_dir, "mf_transaction"))
+    items = list(load_output_json(args.input_dir, "transaction"))
     monthly_aggregates: dict[int, dict] = {}
     for month in range(1, 13):
         m_items = list(filter_year_month(items, args.year, month))
