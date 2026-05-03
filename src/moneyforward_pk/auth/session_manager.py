@@ -2,9 +2,11 @@
 
 Each ``(site, login_user)`` pair maps to a per-account JSON state file under
 ``runtime/state/`` so that subsequent spider invocations can reuse the
-session cookies without re-running ``login_flow``. The login user is hashed
-into the filename so that ``runtime/state/`` may be inspected without
-revealing email addresses.
+session cookies without re-running ``login_flow``. The login user is masked
+into the filename — first three characters of the local + domain parts
+followed by a fixed ``xxx`` literal and an 8-char hash — so the directory
+listing is human-recognisable without revealing the full email address
+(Issue #42).
 
 This is the MoneyForward (ID/PW) counterpart of
 ``scrapy_smbcnikko_pk``'s ``PasskeySessionManager`` — same storage_state
@@ -21,14 +23,23 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
-def _hash_user(login_user: str) -> str:
-    """Return a 12-char hex digest derived from ``login_user``.
+def _mask_user(login_user: str) -> str:
+    """Mask ``login_user`` into a recognisable but reduced filename component.
 
-    Used as a filename component so the state file path does not leak the
-    email address (state files live under a non-secret ``runtime/state/``
-    directory but are still gitignored).
+    Format: ``{local[:3]}xxx_{domain_head[:3]}xxx_{sha256(login_user)[:8]}``.
+    Parts shorter than 3 characters are emitted verbatim with no ``xxx``
+    suffix. The trailing 8-char hash disambiguates collisions when two
+    users share a 3-char prefix on both sides.
     """
-    return hashlib.sha256(login_user.encode("utf-8")).hexdigest()[:12]
+    local, _, domain = login_user.partition("@")
+    domain_head = domain.split(".", 1)[0] if domain else ""
+
+    def _mask(s: str) -> str:
+        return s if len(s) < 3 else f"{s[:3]}xxx"
+
+    head = f"{_mask(local)}_{_mask(domain_head)}" if domain_head else _mask(local)
+    digest = hashlib.sha256(login_user.encode("utf-8")).hexdigest()[:8]
+    return f"{head}_{digest}"
 
 
 class SessionManager:
@@ -38,7 +49,7 @@ class SessionManager:
         self.state_dir = Path(state_dir)
         self.site = site
         self.login_user = login_user
-        suffix = _hash_user(login_user) if login_user else "anon"
+        suffix = _mask_user(login_user) if login_user else "anon"
         self.state_path = self.state_dir / f"{site}_{suffix}.json"
 
     # ------------------------------------------------------------------ status

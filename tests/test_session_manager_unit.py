@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 from moneyforward_pk.auth import SessionManager
-from moneyforward_pk.auth.session_manager import _hash_user
+from moneyforward_pk.auth.session_manager import _mask_user
 
 
 def _run(coro):
@@ -30,12 +30,41 @@ def test_state_path_is_per_site_per_user(tmp_path: Path):
     assert sm_a.state_path.suffix == ".json"
 
 
-def test_state_path_does_not_leak_email(tmp_path: Path):
+def test_state_path_masks_email(tmp_path: Path):
+    """Issue #42: filename keeps a 3-char prefix per part + xxx + hash.
+
+    Full email must not appear (no ``alice``/``example`` substrings beyond
+    the 3-char prefix), but the masked prefix must be recognisable.
+    """
     sm = SessionManager(tmp_path, site="mf", login_user="alice@example.com")
     name = sm.state_path.name
+    # Recognisable prefix is preserved verbatim.
+    assert "ali" in name
+    assert "exa" in name
+    # Full local/domain segments must not leak.
     assert "alice" not in name
     assert "example" not in name
-    assert _hash_user("alice@example.com") in name
+    # Masked component appears verbatim in the filename.
+    assert _mask_user("alice@example.com") in name
+
+
+def test_mask_user_format_short_parts():
+    """Parts shorter than 3 chars are emitted verbatim (no ``xxx`` padding)."""
+    masked = _mask_user("a@b.c")
+    # local "a" and domain head "b" both stay as-is; only the 8-char hash trails.
+    assert masked.startswith("a_b_")
+    # Trailing component is 8 hex chars.
+    tail = masked.rsplit("_", 1)[-1]
+    assert len(tail) == 8
+    assert all(c in "0123456789abcdef" for c in tail)
+
+
+def test_mask_user_format_typical_email():
+    """Typical email gets first-3-char prefixes + ``xxx`` + 8-char hash."""
+    masked = _mask_user("primary@example.com")
+    assert masked.startswith("prixxx_exaxxx_")
+    tail = masked.rsplit("_", 1)[-1]
+    assert len(tail) == 8
 
 
 def test_has_saved_session_false_when_missing(tmp_path: Path):
