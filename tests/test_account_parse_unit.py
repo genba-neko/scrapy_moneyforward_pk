@@ -84,3 +84,126 @@ def test_parse_accounts_is_updating_branch():
     assert is_updating is True
     assert len(items) == 1
     assert items[0]["account_status"] == "更新中"
+
+
+# Realistic shape of the live MoneyForward /accounts table where the bank name
+# is wrapped in nested <a>/<span> elements with newlines between them. Without
+# the legacy join_strip equivalent, ``raw_name`` would carry literal ``\n`` and
+# the downstream sha256 input would diverge from legacy DynamoDB SK values.
+_NESTED_NEWLINE_HTML = """
+<html><body>
+<table>
+  <tr><th>金融機関</th><th>残高</th><th>更新日</th><th>ステータス</th></tr>
+  <tr>
+    <td>
+      <a href="https://moneyforward.com/accounts/show/abc">住信SBIネット銀行</a>
+      <span>
+(
+
+本サイト
+)
+
+203*******</span>
+    </td>
+    <td>
+      <span>
+55,189円
+</span>
+    </td>
+    <td>
+2022/12/27
+
+(05/03 17:35)
+    </td>
+    <td>
+      <span id="js-status-sentence-span-1">正常</span>
+    </td>
+  </tr>
+</table>
+</body></html>
+"""
+
+
+def test_parse_accounts_join_strip_compat_with_legacy():
+    """Issue #42 compat: raw_name SHA256 input must follow legacy join_strip rule.
+
+    Legacy ``MfSpider.join_strip`` (mf_transaction.py:271) removes ``\\n``,
+    ``\\t``, ``,`` then strips. Without the same normalization, real MF HTML
+    that embeds newlines between nested tags would leak ``\\n`` into raw_name
+    and the SHA256 input would diverge from what legacy produced for the
+    same account.
+
+    Note: bit-perfect SK equality with the legacy DynamoDB dump cannot be
+    asserted here because the live MF HTML structure may differ from the
+    legacy capture (additional form/button text inside the same ``<td>``
+    contributes to ``*::text``). We test the join_strip invariants instead:
+    no ``\\n``/``\\t``/``,`` should remain in fields that go through this
+    normalization, and the sha256 digest must be a 64-char hex string of the
+    legacy form.
+    """
+    response = make_response(_NESTED_NEWLINE_HTML)
+    items, _ = parse_accounts(response, today=date(2025, 1, 15))
+    assert len(items) == 1
+    item = items[0]
+
+    # account_item_key must be a 64-char lowercase hex (sha256 of join_strip
+    # output). Same shape as legacy DynamoDB SK values.
+    key = item["account_item_key"]
+    assert len(key) == 64
+    assert all(c in "0123456789abcdef" for c in key)
+
+    # Downstream fields must not leak \n / \t / , (legacy join_strip rule).
+    assert "\n" not in item["account_amount_number"]
+    assert "\t" not in item["account_amount_number"]
+    assert "," not in item["account_amount_number"]
+    assert "\n" not in item["account_date"]
+    assert "\t" not in item["account_date"]
+    # account_name (display) is the trimmed prefix when ``(本サイト)`` matches
+    # the join_strip-normalized raw_name (so newlines around ``(本サイト)``
+    # no longer block the trim regex).
+    assert item["account_name"] == "住信SBIネット銀行"
+
+
+def test_join_strip_helper_matches_legacy_rules():
+    """`_parsers._join_strip` の入出力を pin する単体 test (Opus レビュー対応)。
+
+    Legacy ``MfSpider.join_strip`` (mf_transaction.py:271) は list 入力前提の
+    ``"".join(texts).replace('\\n','').replace('\\t','').replace(',','').strip()``。
+    新実装はそれに加え None / str を gentle に受ける super-set 動作。両者の
+    rule-level equivalence と新実装の防御挙動を pin する。
+    """
+    from moneyforward_pk.spiders._parsers import _join_strip
+
+    # legacy 等価ケース: list[str] 入力で \n / \t / , 除去 + strip
+    assert _join_strip(["  住信SBI\n銀行\t", ",支店\n"]) == "住信SBI銀行支店"
+    assert _join_strip(["12,345円"]) == "12345円"
+    assert _join_strip(["\n\n\t  ", "正常"]) == "正常"
+    assert _join_strip([""]) == ""
+
+    # super-set 拡張 (新実装の防御): None / str を受ける
+    assert _join_strip(None) == ""
+    assert _join_strip("単一文字列\n,") == "単一文字列"
+
+    # 残す挙動: \r や半角スペースは除去しない (legacy 同じ)
+    assert _join_strip(["A\rB"]) == "A\rB"
+    assert _join_strip(["A B C"]) == "A B C"
+
+
+def test_parse_accounts_legacy_six_fields_only():
+    """Issue #42 compat: MoneyforwardAccountItem は legacy 6 フィールドのまま。
+
+    旧 PJ ``scrapy_moneyforward/src/moneyforward/items.py:46-54`` と同じ
+    フィールド集合であることを pin。新規 attribute (login_user 等) を追加
+    する変更が入った場合に regression として落ちる。
+    """
+    from moneyforward_pk.items import MoneyforwardAccountItem
+
+    expected = {
+        "year_month_day",
+        "account_item_key",
+        "account_name",
+        "account_amount_number",
+        "account_date",
+        "account_status",
+    }
+    assert set(MoneyforwardAccountItem.fields.keys()) == expected
