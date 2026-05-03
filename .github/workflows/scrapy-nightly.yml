@@ -2,9 +2,9 @@ name: Scrapy Nightly Smoke
 
 on:
   workflow_dispatch:
-  schedule:
-    # 18:00 UTC = 03:00 JST. Daily smoke that the spider modules still load.
-    - cron: '0 18 * * *'
+  # schedule:
+  #   # 18:00 UTC = 03:00 JST. Daily smoke that the spider modules still load.
+  #   - cron: '0 18 * * *'
 
 jobs:
   smoke:
