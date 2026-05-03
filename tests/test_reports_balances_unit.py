@@ -11,7 +11,7 @@ from moneyforward_pk.reports import balances as bal_mod
 from moneyforward_pk.reports._loader import (
     filter_year_month,
     iter_jsonl,
-    load_spider_jsonl,
+    load_output_json,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "reports" / "sample_transactions.jsonl"
@@ -123,17 +123,15 @@ def test_report_csv_year_summary_has_three_sections():
     assert "支出合計" in csv_text
 
 
-def test_load_spider_jsonl_finds_files(tmp_path: Path):
-    target = tmp_path / "mf_transaction_20260425.jsonl"
-    target.write_text(json.dumps({"x": 1}) + "\n", encoding="utf-8")
-    other = tmp_path / "other_spider_20260425.jsonl"
-    other.write_text(json.dumps({"x": 2}) + "\n", encoding="utf-8")
-    items = list(load_spider_jsonl(tmp_path, "mf_transaction"))
-    assert items == [{"x": 1}]
+def test_load_output_json_finds_file(tmp_path: Path):
+    target = tmp_path / "moneyforward_transaction.json"
+    target.write_text(json.dumps([{"x": 1}, {"x": 2}]), encoding="utf-8")
+    items = list(load_output_json(tmp_path, "transaction"))
+    assert items == [{"x": 1}, {"x": 2}]
 
 
-def test_load_spider_jsonl_missing_dir(tmp_path: Path):
-    assert list(load_spider_jsonl(tmp_path / "missing", "mf_transaction")) == []
+def test_load_output_json_missing_file(tmp_path: Path):
+    assert list(load_output_json(tmp_path, "transaction")) == []
 
 
 def test_iter_jsonl_skips_blank_lines(tmp_path: Path):

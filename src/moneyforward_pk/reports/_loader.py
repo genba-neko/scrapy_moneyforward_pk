@@ -1,7 +1,7 @@
-"""JSONL 読み込みユーティリティ (純関数).
+"""出力 JSON 読み込みユーティリティ (純関数).
 
-JsonOutputPipeline が書き出した ``{spider}_{date:%Y%m%d}.jsonl`` を
-glob で探索し、フィルタ条件で要素を絞り込む。
+crawl_runner が書き出した ``moneyforward_{spider_type}.json`` (JSON 配列) を
+読み込み、フィルタ条件で要素を絞り込む。
 """
 
 from __future__ import annotations
@@ -37,38 +37,30 @@ def iter_jsonl(path: Path) -> Iterator[dict]:
             yield json.loads(stripped)
 
 
-def load_spider_jsonl(
+def load_output_json(
     output_dir: Path,
-    spider_prefix: str,
+    spider_type: str,
 ) -> Iterator[dict]:
-    """``output_dir`` 配下の ``{spider_prefix}_*.jsonl`` を全件読み出す.
+    """``output_dir/moneyforward_{spider_type}.json`` を全件読み出す.
 
     Parameters
     ----------
     output_dir : Path
-        JsonOutputPipeline の出力ディレクトリ。
-    spider_prefix : str
-        ファイル名 prefix (例: ``mf_transaction``)。サニタイズ済みを想定。
+        crawl_runner の出力ディレクトリ。
+    spider_type : str
+        spider 種別 (例: ``transaction``, ``asset_allocation``)。
 
     Yields
     ------
     dict
-        各 JSONL 行。複数ファイルが存在する場合は ``mtime`` 昇順で結合。
+        JSON 配列の各要素。ファイルが存在しない場合は空イテレータ。
     """
-    if not output_dir.exists():
+    path = output_dir / f"moneyforward_{spider_type}.json"
+    if not path.exists():
         return
-    files = sorted(
-        (
-            p
-            for p in output_dir.iterdir()
-            if p.is_file()
-            and p.name.startswith(f"{spider_prefix}_")
-            and p.suffix == ".jsonl"
-        ),
-        key=lambda p: p.stat().st_mtime,
-    )
-    for f in files:
-        yield from iter_jsonl(f)
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    yield from data
 
 
 def filter_year_month(items: Iterable[dict], year: int, month: int) -> Iterator[dict]:

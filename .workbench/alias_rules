@@ -18,3 +18,7 @@ crawl-trans   cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat transaction @args  # 
 crawl-asset   cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat asset @args  # WSL 経由で asset_allocation のみ実行
 crawl-acct    cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat account @args  # WSL 経由で account のみ実行
 wslrun        cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat @args  # WSL 経由で job_runner.sh を実行
+
+report-bal    cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.reports --input-dir ../runtime/output balances @args  # 月次収支レポート (--year YYYY --month M)
+report-asset  cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.reports --input-dir ../runtime/output asset_allocation @args  # 資産配分レポート (--year YYYY --month M --day D)
+report-csv    cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.reports --input-dir ../runtime/output balances_csv @args  # 年次CSV出力 (--year YYYY --output PATH)
