@@ -130,11 +130,12 @@ def _run(args: argparse.Namespace) -> int:
     setup_common_logging()
 
     accounts_path = _resolve_accounts_path(args.accounts)
-    if not accounts_path.exists():
+    bitwarden_mode = os.environ.get("SECRETS_BACKEND", "env") == "bitwarden"
+    if not bitwarden_mode and not accounts_path.exists():
         logger.error("accounts.yaml not found: %s", accounts_path)
         return 1
 
-    accounts = load_accounts(accounts_path)
+    accounts = load_accounts(None if bitwarden_mode else accounts_path)
     invocations = list_invocations(
         accounts,
         site_filter=args.site,

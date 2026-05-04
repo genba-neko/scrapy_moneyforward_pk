@@ -1,8 +1,8 @@
 """Slack notification extension hooked to ``spider_closed``.
 
-The extension is opt-in: when ``SLACK_INCOMING_WEBHOOK_URL`` is empty (the
-default in tests and CI), the extension installs itself but performs no
-network calls.
+The extension is opt-in: when ``SLACK_INCOMING_WEBHOOK_URL`` is not configured
+in the active secrets backend (env or bitwarden), the extension raises
+``NotConfigured`` and Scrapy skips it entirely.
 """
 
 from __future__ import annotations
@@ -12,6 +12,8 @@ import logging
 from scrapy import signals
 from scrapy.exceptions import NotConfigured
 
+from moneyforward.secrets import resolver
+from moneyforward.secrets.exceptions import SecretNotFound
 from moneyforward.utils.slack_notifier import SlackNotifier
 
 logger = logging.getLogger(__name__)
@@ -34,11 +36,10 @@ class SlackNotifierExtension:
     @classmethod
     def from_crawler(cls, crawler) -> "SlackNotifierExtension":
         """Wire the extension to ``spider_closed`` if a webhook is configured."""
-        webhook = crawler.settings.get("SLACK_INCOMING_WEBHOOK_URL", "") or ""
-        if not webhook:
-            # Disabled: Scrapy will skip loading the extension entirely so we
-            # do not waste a signal subscription on a dormant notifier.
-            raise NotConfigured("SLACK_INCOMING_WEBHOOK_URL not set")
+        try:
+            webhook = resolver.get("SLACK_INCOMING_WEBHOOK_URL")
+        except SecretNotFound as exc:
+            raise NotConfigured("SLACK_INCOMING_WEBHOOK_URL not set") from exc
         ext = cls(webhook_url=webhook)
         crawler.signals.connect(ext.spider_closed, signal=signals.spider_closed)
         return ext

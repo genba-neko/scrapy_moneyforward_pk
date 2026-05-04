@@ -10,7 +10,9 @@ Notes
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,45 +60,29 @@ class Invocation:
     password: str = field(repr=False)
 
 
-def load_accounts(yaml_path: str | Path) -> dict[str, list[Account]]:
-    """``config/accounts.yaml`` を読み込み site→accounts の dict を返す.
+def _validate_accounts_dict(raw: object) -> dict[str, list[Account]]:
+    """site→entries の dict を検証して Account リストに変換する共通ロジック.
 
-    Parameters
-    ----------
-    yaml_path : str or Path
-        YAML ファイルのパス.
-
-    Returns
-    -------
-    dict[str, list[Account]]
-        site 名 → そのサイトのアカウント一覧.
+    YAML パース結果・JSON パース結果のどちらにも使用する。
+    VARIANTS バリデーション / user / pass 必須チェックを含む。
 
     Raises
     ------
-    FileNotFoundError
-        YAML ファイルが存在しない場合.
     KeyError
-        YAML 内の site キーが ``VARIANTS`` に存在しない場合.
+        未知の site キーが含まれる場合.
     ValueError
-        ``user`` / ``pass`` キーが欠損している、または値が空の場合.
+        マッピング形式でない、または user / pass が欠損 / 空の場合.
     """
-    path = Path(yaml_path)
-    if not path.exists():
-        raise FileNotFoundError(f"accounts yaml not found: {path}")
-
-    with path.open(encoding="utf-8") as fh:
-        raw = yaml.safe_load(fh) or {}
-
     if not isinstance(raw, dict):
-        raise ValueError(
-            f"accounts yaml root must be a mapping, got {type(raw).__name__}"
-        )
+        raise ValueError(f"accounts root must be a mapping, got {type(raw).__name__}")
 
     result: dict[str, list[Account]] = {}
     for site, entries in raw.items():
         if site not in VARIANTS:
-            raise KeyError(
-                f"unknown site in accounts yaml: {site!r}; known={sorted(VARIANTS)}"
+            raise KeyError(f"unknown site: {site!r}; known={sorted(VARIANTS)}")
+        if entries is None:
+            raise ValueError(
+                f"site {site!r} has no account list; use `{site}: []` for an empty site"
             )
         if not isinstance(entries, list):
             raise ValueError(
@@ -120,6 +106,80 @@ def load_accounts(yaml_path: str | Path) -> dict[str, list[Account]]:
         if accounts:
             result[site] = accounts
     return result
+
+
+def _load_accounts_from_yaml(yaml_path: str | Path) -> dict[str, list[Account]]:
+    """``config/accounts.yaml`` から読み込む (env mode 用)."""
+    path = Path(yaml_path)
+    if not path.exists():
+        raise FileNotFoundError(f"accounts yaml not found: {path}")
+
+    with path.open(encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh) or {}
+
+    return _validate_accounts_dict(raw)
+
+
+def _load_accounts_from_bitwarden() -> dict[str, list[Account]]:
+    """BWS の ACCOUNTS secret から読み込む (bitwarden mode 用).
+
+    Notes
+    -----
+    ACCOUNTS の JSON 生文字列はログに出力しない (パスワード平文流出防止)。
+    """
+    from moneyforward.secrets import resolver
+    from moneyforward.secrets.exceptions import SecretNotFound
+
+    try:
+        raw_json = resolver.get("ACCOUNTS")
+    except SecretNotFound as exc:
+        raise ValueError(f"BWS から ACCOUNTS 取得失敗: {exc}") from exc
+
+    try:
+        raw = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"ACCOUNTS JSON パース失敗: {exc}") from exc
+
+    return _validate_accounts_dict(raw)
+
+
+def load_accounts(yaml_path: str | Path | None = None) -> dict[str, list[Account]]:
+    """site→accounts の dict を返す.
+
+    ``SECRETS_BACKEND`` 環境変数で取得元を切り替える:
+
+    - ``env`` (デフォルト): ``config/accounts.yaml`` から読み込む。
+      ``yaml_path`` が必須。
+    - ``bitwarden``: BWS の ``MONEYFORWARD_ACCOUNTS`` secret から読み込む。
+      ``yaml_path`` は無視される (指定時は warning ログのみ)。
+
+    Parameters
+    ----------
+    yaml_path : str or Path or None
+        YAML ファイルのパス。env mode では必須。bitwarden mode では無視。
+
+    Returns
+    -------
+    dict[str, list[Account]]
+        site 名 → そのサイトのアカウント一覧.
+
+    Raises
+    ------
+    FileNotFoundError
+        YAML ファイルが存在しない場合 (env mode のみ).
+    KeyError
+        site キーが ``VARIANTS`` に存在しない場合.
+    ValueError
+        user / pass が欠損 / 空の場合、または bitwarden mode で JSON 不正の場合.
+    """
+    backend = os.environ.get("SECRETS_BACKEND", "env")
+    if backend == "bitwarden":
+        if yaml_path is not None:
+            logger.warning("bitwarden mode: yaml_path 引数は無視される: %s", yaml_path)
+        return _load_accounts_from_bitwarden()
+    if yaml_path is None:
+        raise ValueError("env mode では yaml_path が必要")
+    return _load_accounts_from_yaml(yaml_path)
 
 
 def list_invocations(

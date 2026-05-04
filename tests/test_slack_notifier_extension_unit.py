@@ -13,28 +13,30 @@ from moneyforward.extensions.slack_notifier_extension import (
 )
 
 
-def _make_crawler(webhook: str | None) -> MagicMock:
+def _make_crawler() -> MagicMock:
     crawler = MagicMock()
-    crawler.settings.get.side_effect = lambda key, default=None: {
-        "SLACK_INCOMING_WEBHOOK_URL": webhook,
-    }.get(key, default)
     crawler.signals.connect = MagicMock()
     return crawler
 
 
-def test_extension_is_not_configured_when_webhook_is_empty():
+def test_extension_is_not_configured_when_webhook_is_empty(monkeypatch):
     """Disabled by default: empty webhook must raise NotConfigured."""
+    monkeypatch.setenv("SLACK_INCOMING_WEBHOOK_URL", "")
     with pytest.raises(NotConfigured):
-        SlackNotifierExtension.from_crawler(_make_crawler(""))
+        SlackNotifierExtension.from_crawler(_make_crawler())
 
 
-def test_extension_is_not_configured_when_webhook_is_none():
+def test_extension_is_not_configured_when_webhook_is_missing(monkeypatch):
+    # SLACK_INCOMING_WEBHOOK_URL は conftest autouse fixture で削除済み
     with pytest.raises(NotConfigured):
-        SlackNotifierExtension.from_crawler(_make_crawler(None))
+        SlackNotifierExtension.from_crawler(_make_crawler())
 
 
-def test_extension_connects_spider_closed_when_webhook_set():
-    crawler = _make_crawler("https://hooks.slack.com/services/x/y/z")
+def test_extension_connects_spider_closed_when_webhook_set(monkeypatch):
+    monkeypatch.setenv(
+        "SLACK_INCOMING_WEBHOOK_URL", "https://hooks.slack.com/services/x/y/z"
+    )
+    crawler = _make_crawler()
     ext = SlackNotifierExtension.from_crawler(crawler)
     assert isinstance(ext, SlackNotifierExtension)
     crawler.signals.connect.assert_called_once()
