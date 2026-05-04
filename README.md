@@ -189,8 +189,7 @@ scrapy_moneyforward_pk/
 
 `PlaywrightSessionMiddleware` が `/sign_in` リダイレクトを検出すると
 `moneyforward_force_login=True` を立て再ログインを試みる。
-`SITE_LOGIN_ALT_USER` / `SITE_LOGIN_ALT_PASS` を設定すると
-2 回目の再ログインで代替アカウントへ自動切替する。
+再試行回数は `MONEYFORWARD_LOGIN_MAX_RETRY` (default: 2) で制御する。
 
 ### セキュリティ
 

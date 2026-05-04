@@ -80,6 +80,15 @@ smbcnikko_pk との設定統一。3 種のキャッシュを対象とする。
   - プロジェクトディレクトリ外（ユーザーホーム）へ移動
   - smbcnikko_pk には未対応 → こちら独自追加
 
+### Step 6: `.env.example` 整理 — 設定キー有効性確認
+
+全キーを実装照合した結果:
+
+- **無効キー**: `MONEYFORWARD_LOGIN_MAX_RETRY` — `settings.py` 未定義のため `crawler.settings.getint()` が env 値を受け取れず常に default `2` を使用。
+  - 修正: `settings.py` に `MONEYFORWARD_LOGIN_MAX_RETRY = int(os.environ.get(..., "2"))` 追加
+- **未実装キー**: `SITE_LOGIN_ALT_USER` / `SITE_LOGIN_ALT_PASS` — src/ に実装なし。README.md の「アカウント切替」節を削除。
+- その他全キー: 実装と一致 ✅
+
 ## 完了事項
 
 - `tools/secrets/bws_tool.py` → 残す（`tools/secrets/README.md` 追加）✅
@@ -91,6 +100,9 @@ smbcnikko_pk との設定統一。3 種のキャッシュを対象とする。
 - `runtime/{inspect,logs,output,state}/`, `data/{archive,archive_inspector}/` `.gitkeep` 整備 ✅
 - `.gitignore` `!runtime/*/` 除外例外追加 ✅
 - `ARCHITECTURE.md` 新規・`README.md`/`CONTRIBUTING.md`/`CLAUDE.md` 最新化 ✅
+- `__pycache__`/`.pytest_cache`/`.ruff_cache` 生成抑止設定追加 ✅
+- `settings.py`: `MONEYFORWARD_LOGIN_MAX_RETRY` 追加 (env → Scrapy 設定疎通修正) ✅
+- `README.md`: 未実装の「アカウント切替 (SITE_LOGIN_ALT_USER)」節を削除 ✅
 
 ## 関連 issue
 
