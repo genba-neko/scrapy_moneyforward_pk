@@ -166,9 +166,141 @@ account_date = _join_strip(tds[2].css("*::text").getall())
 
 ## 検証
 
-- `pytest tests/ -v` → 248 件 pass
+### Unit / static check
+
+- `pytest tests/ -v` → 249 件 pass (新規 +3)
 - `ruff check src/ tests/` → All checks passed
 - `pyright src/ tests/` → 0 errors
+
+### E2E 検証 (本 fix commit 後の crawl_runner 実行結果)
+
+実行: `crawl_runner` 経由 18 invocation 全成功 (Total invocations: 18,
+Succeeded: 18, Failed: 0, Elapsed: 472.2s)。
+
+`runtime/output/moneyforward_account.json` を `.work/results account.csv`
+の legacy 互換要件と照合:
+
+| invariant | 結果 |
+|---|---|
+| records 数 | 39 / 39 unique key |
+| field 集合 | `{year_month_day, account_item_key, account_name, account_amount_number, account_date, account_status}` = legacy 6 フィールド完全一致 |
+| `account_name` 改行混入 | 0 / 39 (修正前は全件混入) |
+| `account_name` `(本サイト)` suffix 残存 | 0 / 39 (trim 正常動作) |
+| `account_amount_number` 改行混入 | 0 / 39 |
+| `account_amount_number` カンマ残存 | 0 / 39 (`12,345円` → `12345円`) |
+| `account_date` 改行混入 | 0 / 39 (`2022/12/27\n\n(05/03 17:35)` → `2022/12/27(05/04 00:56)`) |
+| `account_item_key` 64-hex 形式 | 39 / 39 (legacy SK shape 完全一致) |
+
+サンプル `account_name` 例: `住信SBIネット銀行 Tポイント支店` 等、
+legacy CSV (`nanaco` / `オリックス銀行`) と同じく改行・カンマ・suffix なし。
+
+→ **legacy 互換規則 (`\n` / `\t` / `,` 除去 + `(本サイト)` 以降の trim) を
+両方とも満たすクリーン出力**。bit-perfect な SK 値の equality は HTML 構造
+変動の可能性があるため非保証だが、規則 compat は完全達成。
+
+### 他 spider 出力の compat 検証 (本 fix の影響なし側)
+
+#### transaction (`runtime/output/moneyforward_transaction.json` vs `.work/results trans.csv`)
+
+| 観点 | 旧 CSV | 新 JSON | 一致 |
+|---|---|---|---|
+| record 数 | 50 | 274 (今回 crawl 範囲) | — |
+| field 集合 | 16 fields | 同 16 | ✓ |
+| SK format `\d{4}/\d{2}/\d{2}-\d+` | 50/50 | 274/274 | ✓ |
+| year_month format `\d{6}` | 50/50 | 274/274 | ✓ |
+| (year_month, SK) duplicate | 0 | 0 | ✓ |
+
+注: SK 単独で 29 件の duplicate あり (105 unique vs 274 records)。これは
+MF 仕様で同じ取引が複数月ビューに現れる (例: 振替予定 `2025/08/31-1758540136636743858`
+が 202509-202602 の 6 月分に出現)。`(year_month, SK)` 複合 key では衝突なし、
+DynamoDB compat 問題なし。
+
+seq 部の桁数は時系列で変動 (旧 12 桁 0-padding、新 19 桁 padding なし)
+だが、グローバル一意性は維持。
+
+#### asset_allocation (`runtime/output/moneyforward_asset_allocation.json` vs `.work/results aset.csv`)
+
+| 観点 | 旧 CSV | 新 JSON | 一致 |
+|---|---|---|---|
+| record 数 | 50 | 18 (今回 crawl 範囲) | — |
+| field 集合 | 10 fields | 同 10 | ✓ |
+| SK format `{spider}-{login_user}-portfolio_det_*` | 50/50 | 18/18 | ✓ |
+| (PK, SK) duplicate | 0 | 0 | ✓ |
+
+#### state filename (`runtime/state/`)
+
+- 6 ファイル全て新 mask 形式 (`{site}_{先頭3字}xxx_{ドメイン先頭3字}xxx_{8文字hash}.json`)
+- legacy hash 形式 (`{site}_[0-9a-f]{12}.json`) は 0 件 (掃除済み)
+
+### 検出された問題 (本 fix 範囲外)
+
+#### account_status の空文字問題
+
+新 `runtime/output/moneyforward_account.json` の 39 records のうち
+`account_status` 別の分布:
+
+- `""` (空文字): 29 件 (74%)
+- `"正常"`: 9 件 (23%)
+- `"現在メンテナンス中です。今しばらくお待ち下さい。"`: 1 件 (3%)
+
+旧 PJ CSV (`.work/results account.csv` の `account_status` 列) は
+`"正常"` / `"'---"` 等の値を持つ。
+
+**重要な訂正 (ユーザー指摘反映)**: `"'---"` (Excel safety prefix 付きの
+`---`) は **MF HTML から取得した値ではなく、legacy code 側の hardcoded
+fallback**。
+
+旧 PJ `mf_account.py:169` の実装:
+
+```python
+account_status = "---"  # loop 前に初期化 (hardcoded fallback)
+for status_span in table_row.css("td")[3].css('span'):
+    status_id = status_span.xpath('@id').get()
+    status_text = self.join_strip(status_span.css('span::text').get())
+    if 'js-status-sentence-span-' in status_id:
+        account_status = status_text  # マッチ時のみ上書き
+```
+
+= マッチする span が見つからない / span text が空の場合は `"---"` のまま。
+旧 CSV の `"'---"` はこの default 値の出現で、「scraping で常に値が
+取れていた」わけではない。
+
+新 PJ `_parsers.py:213` には fallback がないため、空文字になる。
+
+原因の見立て (Opus レビューでも指摘済):
+- 新 PJ `_parsers.py:206-213` は CSS の `:not([id^="js-hidden-status-sentence-span"])`
+  filter で span text を **直接取得** (外側 span の text のみ)
+- 旧 PJ `mf_account.py:168-174` は td[3] 内の全 span を loop し、id 文字列
+  マッチで `status_span.css('span::text').get()` (= **入れ子 span** の text)
+  を取得 (last-write-wins)
+- 実 MF HTML が `<span id="js-status-sentence-span-X"><span>正常</span></span>`
+  のような nested 構造の場合、新 PJ の selector では外側 span の直接 text
+  しか取得できず空文字になる
+- 加えて空文字時の hardcoded fallback `"---"` も新 PJ には無い
+
+**追記 (2026-05-04 後ターン): 選択肢 3 (legacy 移植) を本 issue 内で実装**。
+
+`_parsers.py` の status 抽出を以下に置換 (legacy `mf_account.py:168-174` の
+loop 形式を移植):
+
+```python
+account_status = "---"
+for status_span in tds[3].css("span"):
+    status_id = status_span.xpath("@id").get() or ""
+    if "js-status-sentence-span-" not in status_id:
+        continue
+    account_status = _join_strip(status_span.css("span::text").get())
+```
+
+挙動 (legacy と byte-equivalent):
+- matching span がそもそも存在しない → `"---"` fallback
+- matching span 存在 + 入れ子 span text あり → その text を取得
+- matching span 存在 + 入れ子 span text 空 → `""` (legacy も同じ、上書き
+  によって fallback が消える)
+
+新規 regression test:
+`test_parse_accounts_status_nested_span_legacy_compat` を追加。入れ子 span
+での `"正常"` 取得と、matching span 不在時の `"---"` fallback 両方を pin。
 
 ## 残作業 (本 fix 以後)
 

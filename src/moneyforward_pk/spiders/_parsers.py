@@ -222,14 +222,17 @@ def parse_accounts(
         amount_number = _join_strip(tds[1].css("*::text").getall())
         account_date = _join_strip(tds[2].css("*::text").getall())
 
-        status_spans = (
-            tds[3]
-            .css(
-                'span[id^="js-status-sentence-span-"]:not([id^="js-hidden-status-sentence-span"])::text'
-            )
-            .getall()
-        )
-        account_status = " ".join(s.strip() for s in status_spans if s.strip())
+        # Mirror legacy ``mf_account.py:168-174``: walk every span in td[3],
+        # match by id substring, and pull the text of the *inner* span (legacy
+        # MF markup nested ``<span>正常</span>`` inside the status outer span).
+        # The hardcoded ``"---"`` initial value is the legacy fallback for
+        # rows whose status span is missing or empty.
+        account_status = "---"
+        for status_span in tds[3].css("span"):
+            status_id = status_span.xpath("@id").get() or ""
+            if "js-status-sentence-span-" not in status_id:
+                continue
+            account_status = _join_strip(status_span.css("span::text").get())
 
         if "更新中" in account_status:
             is_updating = True

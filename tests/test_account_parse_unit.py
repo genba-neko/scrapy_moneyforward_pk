@@ -189,6 +189,54 @@ def test_join_strip_helper_matches_legacy_rules():
     assert _join_strip(["A B C"]) == "A B C"
 
 
+_NESTED_STATUS_HTML = """
+<html><body>
+<table>
+  <tr><th>金融機関</th><th>残高</th><th>更新日</th><th>ステータス</th></tr>
+  <tr>
+    <td>みずほ銀行</td>
+    <td>12345円</td>
+    <td>2025/01/15 12:00</td>
+    <td>
+      <span id="js-hidden-status-sentence-span-X" style="display:none">隠し</span>
+      <span id="js-status-sentence-span-X"><span>正常</span></span>
+    </td>
+  </tr>
+  <tr>
+    <td>みなと銀行</td>
+    <td>1000円</td>
+    <td>2025/01/15 12:00</td>
+    <td>
+      <span id="some-other-id">別物</span>
+    </td>
+  </tr>
+</table>
+</body></html>
+"""
+
+
+def test_parse_accounts_status_nested_span_legacy_compat():
+    """Issue #42 compat: 入れ子 span 構造 + ``---`` fallback の挙動を pin する。
+
+    旧 PJ ``mf_account.py:168-174`` の挙動:
+    - matching span (``js-status-sentence-span-`` 含む id) の入れ子 span の
+      text を取得 (``status_span.css('span::text').get()``)
+    - matching span がそもそも存在しない場合は loop 前初期化の ``"---"``
+      が残る (空 text で上書きされた場合は ``""`` になる、これも legacy 通り)
+
+    実 MF HTML が ``<span id="..."><span>正常</span></span>`` の入れ子構造を
+    取るケースと、status span が無い (または別 id の) ケースの両方で、
+    legacy 同等出力になることを検証する。
+    """
+    response = make_response(_NESTED_STATUS_HTML)
+    items, _ = parse_accounts(response, today=date(2025, 1, 15))
+    assert len(items) == 2
+    # 入れ子 span 構造から「正常」が取れる
+    assert items[0]["account_status"] == "正常"
+    # matching span (js-status-sentence-span-) が存在しない → "---" fallback
+    assert items[1]["account_status"] == "---"
+
+
 def test_parse_accounts_legacy_six_fields_only():
     """Issue #42 compat: MoneyforwardAccountItem は legacy 6 フィールドのまま。
 
