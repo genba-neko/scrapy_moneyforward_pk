@@ -282,7 +282,7 @@ def finalize_output_files(
         if not path.exists():
             continue
         with path.open("a", encoding="utf-8") as fh:
-            fh.write("]")
+            fh.write("\n]")
 
 
 def summarize(

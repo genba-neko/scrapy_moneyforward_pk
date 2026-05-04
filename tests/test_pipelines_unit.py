@@ -48,7 +48,7 @@ def test_pipeline_appends_items_to_pre_initialized_file(tmp_path: Path) -> None:
     text = pre.read_text(encoding="utf-8")
     # Without the closing ``]`` the file is not yet valid JSON; closing is the
     # orchestrator's responsibility. We test the array body here.
-    assert text == '[{"a": 1, "b": "あ"},{"a": 2}'
+    assert text == '[\n  {\n    "a": 1,\n    "b": "あ"\n  },\n  {\n    "a": 2\n  }'
 
 
 def test_pipeline_continues_appending_across_invocations(tmp_path: Path) -> None:
@@ -90,7 +90,7 @@ def test_pipeline_self_initializes_when_file_missing(tmp_path: Path) -> None:
     pipeline.close_spider(spider)
 
     out = tmp_path / "moneyforward_transaction.json"
-    assert out.read_text(encoding="utf-8") == '[{"x": 1}'
+    assert out.read_text(encoding="utf-8") == '[\n  {\n    "x": 1\n  }'
 
 
 def test_pipeline_records_path_in_stats(tmp_path: Path) -> None:
