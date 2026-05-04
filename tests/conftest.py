@@ -36,6 +36,9 @@ _OWNED_ENV_KEYS = (
     "OUTPUT_DIR",
     "OUTPUT_FILENAME_TEMPLATE",
     "SLACK_INCOMING_WEBHOOK_URL",
+    "SECRETS_BACKEND",
+    "BWS_ACCESS_TOKEN",
+    "ORGANIZATION_ID",
 )
 
 
@@ -44,6 +47,16 @@ def _isolate_moneyforward_env(monkeypatch):
     """Strip MoneyForward-related env from each test (no setdefault)."""
     for key in _OWNED_ENV_KEYS:
         monkeypatch.delenv(key, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _reset_resolver():
+    """resolver global 状態を各テスト前後にリセット。secrets backend を隔離する."""
+    from moneyforward.secrets import resolver
+
+    resolver.reset_for_test()
+    yield
+    resolver.reset_for_test()
 
 
 @pytest.fixture

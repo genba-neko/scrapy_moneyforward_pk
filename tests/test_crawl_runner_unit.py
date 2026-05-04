@@ -121,6 +121,56 @@ def test_load_accounts_skips_empty_account_list(tmp_path: Path) -> None:
     assert load_accounts(path) == {}
 
 
+def test_load_accounts_env_mode_requires_yaml_path() -> None:
+    # SECRETS_BACKEND 未設定 = env mode → yaml_path=None は ValueError
+    with pytest.raises(ValueError, match="yaml_path"):
+        load_accounts(None)
+
+
+# -------------------------------------------------------- bitwarden mode
+
+
+def test_load_accounts_bitwarden_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SECRETS_BACKEND", "bitwarden")
+    accounts_json = json.dumps({"mf": [{"user": "u@example.com", "pass": "secret"}]})
+    with patch("moneyforward.secrets.resolver.get", return_value=accounts_json):
+        result = load_accounts()
+    assert result == {"mf": [Account(user="u@example.com", password="secret")]}
+
+
+def test_load_accounts_bitwarden_ignores_yaml_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("SECRETS_BACKEND", "bitwarden")
+    accounts_json = json.dumps({"mf": [{"user": "u@example.com", "pass": "p"}]})
+    with patch("moneyforward.secrets.resolver.get", return_value=accounts_json):
+        result = load_accounts(tmp_path / "nonexistent.yaml")
+    assert "mf" in result
+
+
+def test_load_accounts_bitwarden_invalid_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SECRETS_BACKEND", "bitwarden")
+    with patch("moneyforward.secrets.resolver.get", return_value="not-json"):
+        with pytest.raises(ValueError, match="JSON パース失敗"):
+            load_accounts()
+
+
+def test_load_accounts_bitwarden_unknown_site(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SECRETS_BACKEND", "bitwarden")
+    accounts_json = json.dumps({"ghost_bank": [{"user": "u@example.com", "pass": "p"}]})
+    with patch("moneyforward.secrets.resolver.get", return_value=accounts_json):
+        with pytest.raises(KeyError, match="unknown site"):
+            load_accounts()
+
+
+def test_load_accounts_bitwarden_missing_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SECRETS_BACKEND", "bitwarden")
+    accounts_json = json.dumps({"mf": [{"user": "u@example.com"}]})
+    with patch("moneyforward.secrets.resolver.get", return_value=accounts_json):
+        with pytest.raises(ValueError, match="missing or empty 'pass'"):
+            load_accounts()
+
+
 # ------------------------------------------------------------- list_invocations
 
 
