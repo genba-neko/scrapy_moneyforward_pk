@@ -293,8 +293,7 @@ def test_finalize_output_files_appends_closing_bracket(tmp_path: Path) -> None:
     for st in SPIDER_TYPES:
         p = tmp_path / f"moneyforward_{st}.json"
         text = p.read_text(encoding="utf-8")
-        # Empty array but valid JSON
-        assert text == "[]"
+        # Empty array but valid JSON (pretty-printed: "[\n]")
         assert json.loads(text) == []
 
 
