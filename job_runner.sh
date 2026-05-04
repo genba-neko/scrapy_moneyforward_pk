@@ -53,6 +53,9 @@ case "$cmd" in
         ;;
 esac
 
+# Python bytecode を出力せず __pycache__ 生成を抑止
+export PYTHONDONTWRITEBYTECODE=1
+
 cd src
 if [[ -n "$spider_type" ]]; then
     exec "$PY" -m moneyforward.crawl_runner --type "$spider_type" "$@"

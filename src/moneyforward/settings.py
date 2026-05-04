@@ -105,6 +105,7 @@ FEED_EXPORT_ENCODING = "utf-8"
 SITE_LOGIN_USER = os.environ.get("SITE_LOGIN_USER", "")
 SITE_LOGIN_PASS = os.environ.get("SITE_LOGIN_PASS", "")
 SITE_PAST_MONTHS = int(os.environ.get("SITE_PAST_MONTHS", "12"))
+MONEYFORWARD_LOGIN_MAX_RETRY = int(os.environ.get("MONEYFORWARD_LOGIN_MAX_RETRY", "2"))
 
 # JSON output (replaces the legacy DynamoDB pipeline; USER_DIRECTIVES)
 # Issue #40: aggregated 3-file JSON-array output (transaction / account /
