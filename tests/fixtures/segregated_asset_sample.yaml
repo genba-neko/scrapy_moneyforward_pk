@@ -1,0 +1,17 @@
+# テスト用ミニ定義ファイル
+segregated:
+  - period: ["2023-01-01", "unlimited"]
+    asset_class: "待機資金"
+    amount: 1000000
+    note: "テスト用分別管理"
+
+  - period: ["2023-06-01", "2023-12-31"]
+    asset_class: "株式（長期）"
+    amount: 500000
+    note: "テスト用期間限定"
+
+debt:
+  - period: ["2023-03-01", "2023-03-31"]
+    asset_class: "待機資金"
+    amount: 2000000
+    note: "テスト用借入"

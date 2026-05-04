@@ -110,5 +110,6 @@ tools/passkey/state/**
 # Only the *.example.yaml templates may be committed.
 # -----------------------------------------------------------------------------
 config/accounts.yaml
+config/segregated_asset.yaml
 config/*.local.yaml
 config/secrets/

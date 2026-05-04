@@ -12,13 +12,13 @@ test-unit     $VENV_PYTHON -m pytest -k unit @args  # unit テストのみ実行
 test-all      $VENV_PYTHON -m pytest @args  # 全テスト実行
 test-full     $VENV_PYTHON -m pytest --cov --cov-report=term-missing @args  # カバレッジ付き
 
-crawl-list    cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat all --list @args  # WSL 経由で起動予定一覧 (実行しない)
-crawl         cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat all @args  # WSL 経由で crawl_runner 実行 (--site で絞り込み可)
-crawl-trans   cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat transaction @args  # WSL 経由で transaction のみ実行
-crawl-asset   cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat asset @args  # WSL 経由で asset_allocation のみ実行
-crawl-acct    cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat account @args  # WSL 経由で account のみ実行
-wslrun        cd $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat @args  # WSL 経由で job_runner.sh を実行
+crawl-list    Push-Location $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat all --list @args ; Pop-Location  # WSL 経由で起動予定一覧 (実行しない)
+crawl         Push-Location $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat all @args ; Pop-Location  # WSL 経由で crawl_runner 実行 (--site で絞り込み可)
+crawl-trans   Push-Location $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat transaction @args ; Pop-Location  # WSL 経由で transaction のみ実行
+crawl-asset   Push-Location $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat asset @args ; Pop-Location  # WSL 経由で asset_allocation のみ実行
+crawl-acct    Push-Location $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat account @args ; Pop-Location  # WSL 経由で account のみ実行
+wslrun        Push-Location $PROJECT_ROOT ; cmd.exe /c wsl_runner.bat @args ; Pop-Location  # WSL 経由で job_runner.sh を実行
 
-report-bal    cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.reports --input-dir ../runtime/output balances @args  # 月次収支レポート (--year YYYY --month M)
-report-asset  cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.reports --input-dir ../runtime/output asset_allocation @args  # 資産配分レポート (--year YYYY --month M --day D)
-report-csv    cd $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward_pk.reports --input-dir ../runtime/output balances_csv @args  # 年次CSV出力 (--year YYYY --output PATH)
+report-bal    Push-Location $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward.reports --input-dir ../runtime/output balances @args ; Pop-Location  # 月次収支レポート (--year YYYY --month M)
+report-asset  Push-Location $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward.reports --input-dir ../runtime/output asset_allocation --segregated-config ../config/segregated_asset.yaml @args ; Pop-Location  # 資産配分レポート (--year YYYY --month M --day D)
+report-csv    Push-Location $PROJECT_ROOT/src ; $VENV_PYTHON -m moneyforward.reports --input-dir ../runtime/output balances_csv @args ; Pop-Location  # 年次CSV出力 (--year YYYY --output PATH)

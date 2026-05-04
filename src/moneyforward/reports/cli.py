@@ -13,8 +13,12 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
+from datetime import date
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from moneyforward.reports import asset_allocation as aa_mod
 from moneyforward.reports import balances as bal_mod
@@ -23,7 +27,14 @@ from moneyforward.reports._loader import (
     filter_year_month_day,
     load_output_json,
 )
+from moneyforward.reports.segregated_asset import (
+    apply_adjustments,
+    compute_adjustments,
+    load_segregated_config,
+)
 from moneyforward.utils.slack_notifier import SlackNotifier
+
+_DEFAULT_SEGREGATED_CONFIG = Path("config/segregated_asset.yaml")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -57,6 +68,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p_aa.add_argument("-y", "--year", type=int, required=True)
     p_aa.add_argument("-m", "--month", type=int, required=True)
     p_aa.add_argument("-d", "--day", type=int, required=True)
+    p_aa.add_argument(
+        "--segregated-config",
+        type=Path,
+        default=_DEFAULT_SEGREGATED_CONFIG,
+        dest="segregated_config",
+        help=f"分別管理資産・借入控除定義 YAML (既定: {_DEFAULT_SEGREGATED_CONFIG})",
+    )
+    p_aa.add_argument(
+        "--no-segregated-config",
+        action="store_true",
+        dest="no_segregated_config",
+        help="分別管理・借入控除を適用しない (比較・デバッグ用)",
+    )
 
     p_csv = sub.add_parser("balances_csv", help="年次収支 CSV")
     p_csv.add_argument("-y", "--year", type=int, required=True)
@@ -83,6 +107,24 @@ def _cmd_asset_allocation(args: argparse.Namespace) -> str:
     items = list(load_output_json(args.input_dir, "asset_allocation"))
     daily = list(filter_year_month_day(items, args.year, args.month, args.day))
     aggregated = aa_mod.aggregate_asset_allocation(daily)
+
+    if not getattr(args, "no_segregated_config", False):
+        cfg_path: Path = args.segregated_config
+        if not cfg_path.exists():
+            if cfg_path == _DEFAULT_SEGREGATED_CONFIG:
+                logger.warning(
+                    "分別管理資産定義ファイルが見つかりません: %s "
+                    "(example をコピーして作成: copy config/segregated_asset.example.yaml config/segregated_asset.yaml)",
+                    cfg_path,
+                )
+            else:
+                raise FileNotFoundError(
+                    f"--segregated-config で指定されたファイルが存在しません: {cfg_path}"
+                )
+        cfg = load_segregated_config(cfg_path)
+        adj = compute_adjustments(cfg, date(args.year, args.month, args.day))
+        aggregated = apply_adjustments(aggregated, adj)
+
     return aa_mod.report_message(aggregated, args.year, args.month, args.day)
 
 
