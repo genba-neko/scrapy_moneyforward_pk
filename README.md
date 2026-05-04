@@ -96,13 +96,47 @@ MONEYFORWARD_HEADLESS=false ./job_runner.sh transaction
 
 ```powershell
 # 月次収支サマリ (Slack 形式)
-..\.venv-win\Scripts\python -m moneyforward.reports balances 2026 4
+..\.venv-win\Scripts\python -m moneyforward.reports balances -y 2026 -m 4
 
-# 1 年分 CSV を標準出力
-..\.venv-win\Scripts\python -m moneyforward.reports balances-csv 2026
+# 1 年分 CSV
+..\.venv-win\Scripts\python -m moneyforward.reports balances_csv -y 2026 -o out.csv
 
-# 資産配分サマリ
-..\.venv-win\Scripts\python -m moneyforward.reports asset-allocation 2026 4 25
+# 資産配分サマリ (分別管理・借入控除あり)
+..\.venv-win\Scripts\python -m moneyforward.reports asset_allocation -y 2026 -m 4 -d 25
+
+# 分別管理補正なし (比較・デバッグ用)
+..\.venv-win\Scripts\python -m moneyforward.reports asset_allocation -y 2026 -m 4 -d 25 --no-segregated-config
+```
+
+### 分別管理資産・借入控除の設定
+
+`asset_allocation` レポートは `config/segregated_asset.yaml` を自動読込する (不在時はスキップ)。
+
+```powershell
+copy config\segregated_asset.example.yaml config\segregated_asset.yaml
+# config\segregated_asset.yaml を編集 (gitignore 対象)
+```
+
+YAML スキーマ:
+
+```yaml
+segregated:  # MF が捕捉できない資産 → 「分別管理資産」参考値に加算
+  - period: ["YYYY-MM-DD", "YYYY-MM-DD | unlimited"]
+    asset_class: "待機資金"   # ASSET_CLASSES のいずれか
+    amount: 1000000          # 整数 (円)。負値可
+    note: "メモ"
+
+debt:        # 短期借入 → total と asset_class から減算
+  - period: ["2026-02-18", "2026-04-06"]
+    asset_class: "待機資金"
+    amount: 2700000
+    note: "野村信託銀行 証券担保ローン短期"
+```
+
+カスタム設定ファイルを指定する場合:
+
+```powershell
+..\.venv-win\Scripts\python -m moneyforward.reports asset_allocation -y 2026 -m 4 -d 25 --segregated-config path\to\my.yaml
 ```
 
 ## 証券 CSV → 配当データ (`seccsv/` パッケージ)
