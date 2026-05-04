@@ -103,9 +103,10 @@ class JsonArrayOutputPipeline:
                 "JsonArrayOutputPipeline.process_item called before open_spider"
             )
         record = ItemAdapter(item).asdict()
-        if self._wrote_first_in_run:
-            self._file.write(",")
-        self._file.write(json.dumps(record, ensure_ascii=False, default=str))
+        item_json = json.dumps(record, ensure_ascii=False, default=str, indent=2)
+        indented = "  " + item_json.replace("\n", "\n  ")
+        separator = ",\n" if self._wrote_first_in_run else "\n"
+        self._file.write(separator + indented)
         self._wrote_first_in_run = True
         return item
 
