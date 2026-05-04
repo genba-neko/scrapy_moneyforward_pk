@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from moneyforward_pk.seccsv.cli import main as cli_main
-from moneyforward_pk.seccsv.converter import convert, detect_broker
+from moneyforward.seccsv.cli import main as cli_main
+from moneyforward.seccsv.converter import convert, detect_broker
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "seccsv"
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from moneyforward_pk.utils.session_utils import is_login_url, is_session_expired
+from moneyforward.utils.session_utils import is_login_url, is_session_expired
 from tests.helpers import make_response
 
 

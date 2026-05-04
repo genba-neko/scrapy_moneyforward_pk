@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from moneyforward_pk.utils.playwright_utils import (
+from moneyforward.utils.playwright_utils import (
     _BLOCK_RESOURCE_TYPES,
     _should_block,
     close_page_quietly,

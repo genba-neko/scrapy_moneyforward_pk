@@ -11,7 +11,7 @@ from unittest.mock import MagicMock
 import scrapy
 from scrapy.http import Request, Response
 
-from moneyforward_pk.spiders.base.moneyforward_base import MoneyforwardBase
+from moneyforward.spiders.base.moneyforward_base import MoneyforwardBase
 
 _TEST_PASSWORD = "dummy-pass"  # noqa: S105 — fixture credential, not a real secret
 
@@ -114,13 +114,13 @@ def test_base_module_import_does_not_configure_root_logger():
     suite's root logger configuration depend on import order. The call now
     lives inside ``from_crawler`` so library-style imports are side-effect-free.
     """
-    flag = "_moneyforward_pk_logging_configured"
+    flag = "_moneyforward_logging_configured"
     root = logging.getLogger()
     if hasattr(root, flag):
         delattr(root, flag)
 
     # Re-import the module fresh to simulate a cold import.
-    import moneyforward_pk.spiders.base.moneyforward_base as base_mod
+    import moneyforward.spiders.base.moneyforward_base as base_mod
 
     importlib.reload(base_mod)
     assert not getattr(root, flag, False)

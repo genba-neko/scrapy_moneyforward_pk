@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 import scrapy
 from scrapy.http import HtmlResponse, Request, Response
 
-from moneyforward_pk.spiders.transaction import MfTransactionSpider
+from moneyforward.spiders.transaction import MfTransactionSpider
 
 _FIXTURE_HTML = (
     "<html><body><table><tbody class='transaction_list'>"

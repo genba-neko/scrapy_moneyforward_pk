@@ -1,14 +1,14 @@
-# Legacy → scrapy_moneyforward_pk 移植マッピング
+# Legacy → scrapy_moneyforward 移植マッピング
 
 旧 `scrapy_moneyforward` (Scrapy + Splash + Lua) から本リビルド
-`scrapy_moneyforward_pk` (Scrapy + Playwright) への対応表。
+`scrapy_moneyforward` (Scrapy + Playwright) への対応表。
 
 実装場所 (旧) は `genba-neko/scrapy_moneyforward` リポジトリ、
-新は本リポジトリ `src/moneyforward_pk/` 配下を指す。
+新は本リポジトリ `src/moneyforward/` 配下を指す。
 
 ## 全体方針
 
-| 観点 | legacy | scrapy_moneyforward_pk |
+| 観点 | legacy | scrapy_moneyforward |
 |---|---|---|
 | ブラウザ駆動 | Splash + Lua スクリプト | scrapy-playwright (Chromium 同梱) |
 | Python 要件 | 3.8 系 | 3.10+ |
@@ -20,7 +20,7 @@
 
 ## ファイル/モジュール対応表
 
-| # | legacy | scrapy_moneyforward_pk | 移植状況 |
+| # | legacy | scrapy_moneyforward | 移植状況 |
 |---|---|---|---|
 | 1 | `splash/login.lua` (Lua) | `spiders/base/x_moneyforward_login_mixin.py` (`login_flow`) | ★ 移植 (Playwright async) |
 | 2 | `splash/wait_render.lua` | `utils/playwright_utils.py` (`managed_page` ctx) | ★ 移植 |
@@ -38,7 +38,7 @@
 | 14 | `tables/` (DynamoDB ヘルパー) | (撤去) | ☓ JSON 出力で代替 (USER_DIRECTIVES) |
 | 15 | `get_balances_report.py` | `reports/balances.py` (`aggregate_balances` / `report_message` / `report_csv`) | ★ 移植 (c3 iter1 T2) |
 | 16 | `get_asset_allocation_report.py` | `reports/asset_allocation.py` (`aggregate_assets` / `report_message`) | ★ 移植 (c3 iter1 T2) |
-| 17 | `get_balances_csv.py` | `reports/cli.py` (`python -m moneyforward_pk.reports`) | ★ 移植 (c3 iter1 T2) |
+| 17 | `get_balances_csv.py` | `reports/cli.py` (`python -m moneyforward.reports`) | ★ 移植 (c3 iter1 T2) |
 | 18 | `seccsv_download/seccsv_to_incomes.py` | `seccsv/converter.py` (`convert_csv` / `_parsers.py`) | ★ 移植 (c3 iter1 T3, 4 broker 対応) |
 | 19 | `MfSpider` 多態継承 (1 ファイル 10 クラス) | `spiders/variants/registry.py::VARIANTS` (`VariantConfig` dataclass) | ★ 設計変更 (c3 iter1 T4 + iter2 T2/T4) |
 | 20 | `xmf_ssnb` 系 3 spider | `spiders/xmf_ssnb_*.py` (3 ファイル × 4 行 subclass) | ★ 移植 (c3 iter2 T3) |
@@ -49,7 +49,7 @@
 
 ## 環境変数 (主要)
 
-| legacy | scrapy_moneyforward_pk | 備考 |
+| legacy | scrapy_moneyforward | 備考 |
 |---|---|---|
 | `MF_USER` / `MF_PASS` | `SITE_LOGIN_USER` / `SITE_LOGIN_PASS` | リネーム |
 | (なし) | `SITE_LOGIN_ALT_USER` / `SITE_LOGIN_ALT_PASS` | 新規 (HA 用) |
@@ -64,14 +64,14 @@
 
 ## 実行コマンド
 
-| 用途 | legacy | scrapy_moneyforward_pk |
+| 用途 | legacy | scrapy_moneyforward |
 |---|---|---|
 | transaction 取得 (mf 本体) | `scrapy crawl mf` (transactions) | `scrapy crawl mf_transaction` |
 | asset 取得 (mf 本体) | `scrapy crawl mf_asset_allocation` (legacy 名同一) | `scrapy crawl mf_asset_allocation` |
 | account 取得 (mf 本体) | `scrapy crawl mf_account` | `scrapy crawl mf_account` |
 | 派生サイト (例: 住信SBI) | `scrapy crawl xmf_ssnb` | `scrapy crawl xmf_ssnb_transaction` (他 24 派生スパイダー同様) |
-| 集計レポート (CSV) | `python get_balances_csv.py 2024` | `python -m moneyforward_pk.reports balances 2024` |
-| 配当 CSV 変換 | `python seccsv_to_incomes.py path.csv` | `python -m moneyforward_pk.seccsv path.csv` |
+| 集計レポート (CSV) | `python get_balances_csv.py 2024` | `python -m moneyforward.reports balances 2024` |
+| 配当 CSV 変換 | `python seccsv_to_incomes.py path.csv` | `python -m moneyforward.seccsv path.csv` |
 | バッチ実行 | `bg_job_runner.bat` (docker) | `job_runner.bat <name>` (素のホスト) |
 | スケジュール | host cron / Windows タスク | `.github/workflows/scrapy-nightly.yml` |
 

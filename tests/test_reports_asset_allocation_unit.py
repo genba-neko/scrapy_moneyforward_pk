@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from moneyforward_pk.reports import asset_allocation as aa_mod
-from moneyforward_pk.reports._loader import filter_year_month_day, iter_jsonl
+from moneyforward.reports import asset_allocation as aa_mod
+from moneyforward.reports._loader import filter_year_month_day, iter_jsonl
 
 FIXTURE = (
     Path(__file__).parent / "fixtures" / "reports" / "sample_asset_allocation.jsonl"

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from datetime import date
 
-from moneyforward_pk.spiders._parsers import parse_accounts
+from moneyforward.spiders._parsers import parse_accounts
 from tests.helpers import make_response
 
 FIXTURE_HTML = """
@@ -172,7 +172,7 @@ def test_join_strip_helper_matches_legacy_rules():
     新実装はそれに加え None / str を gentle に受ける super-set 動作。両者の
     rule-level equivalence と新実装の防御挙動を pin する。
     """
-    from moneyforward_pk.spiders._parsers import _join_strip
+    from moneyforward.spiders._parsers import _join_strip
 
     # legacy 等価ケース: list[str] 入力で \n / \t / , 除去 + strip
     assert _join_strip(["  住信SBI\n銀行\t", ",支店\n"]) == "住信SBI銀行支店"
@@ -244,7 +244,7 @@ def test_parse_accounts_legacy_six_fields_only():
     フィールド集合であることを pin。新規 attribute (login_user 等) を追加
     する変更が入った場合に regression として落ちる。
     """
-    from moneyforward_pk.items import MoneyforwardAccountItem
+    from moneyforward.items import MoneyforwardAccountItem
 
     expected = {
         "year_month_day",

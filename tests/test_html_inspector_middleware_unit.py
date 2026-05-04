@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 from scrapy.http import HtmlResponse, Request
 
-from moneyforward_pk.middlewares.html_inspector import HtmlInspectorMiddleware
+from moneyforward.middlewares.html_inspector import HtmlInspectorMiddleware
 
 
 def _spider():

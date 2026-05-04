@@ -12,7 +12,7 @@ from datetime import date
 
 from scrapy.http import HtmlResponse, Request
 
-from moneyforward_pk.spiders._parsers import (
+from moneyforward.spiders._parsers import (
     parse_accounts,
     parse_asset_allocation,
     parse_transactions,

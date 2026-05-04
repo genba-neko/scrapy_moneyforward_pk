@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from moneyforward_pk.items import (
+from moneyforward.items import (
     MoneyforwardAccountItem,
     MoneyforwardAssetAllocationItem,
     MoneyforwardTransactionItem,

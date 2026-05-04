@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from moneyforward_pk.reports import balances as bal_mod
-from moneyforward_pk.reports._loader import (
+from moneyforward.reports import balances as bal_mod
+from moneyforward.reports._loader import (
     filter_year_month,
     iter_jsonl,
     load_output_json,

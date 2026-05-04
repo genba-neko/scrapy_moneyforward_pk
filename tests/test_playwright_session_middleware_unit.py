@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 from scrapy.http import HtmlResponse, Request
 
-from moneyforward_pk.middlewares.playwright_session import (
+from moneyforward.middlewares.playwright_session import (
     PlaywrightSessionMiddleware,
 )
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from moneyforward_pk.spiders.variants import VARIANTS, VariantConfig, get_variant
+from moneyforward.spiders.variants import VARIANTS, VariantConfig, get_variant
 
 
 def test_variant_config_is_frozen():
@@ -61,7 +61,7 @@ def test_get_variant_unknown_raises_keyerror():
 
 def test_transaction_spider_default_resolves_mf():
     """site 省略時は ``variant_name = "mf"`` をデフォルトに解決."""
-    from moneyforward_pk.spiders.transaction import MfTransactionSpider
+    from moneyforward.spiders.transaction import MfTransactionSpider
 
     spider = MfTransactionSpider()
     assert spider.name == "transaction"
@@ -74,7 +74,7 @@ def test_transaction_spider_default_resolves_mf():
 
 def test_transaction_spider_with_site_kwarg_targets_partner_portal():
     """``site`` kwarg で xmf_ssnb 等の派生サイト URL に切替."""
-    from moneyforward_pk.spiders.transaction import MfTransactionSpider
+    from moneyforward.spiders.transaction import MfTransactionSpider
 
     spider = MfTransactionSpider(site="xmf_ssnb")
     assert spider.variant.name == "xmf_ssnb"
@@ -86,7 +86,7 @@ def test_transaction_spider_with_site_kwarg_targets_partner_portal():
 
 
 def test_account_spider_with_site_kwarg():
-    from moneyforward_pk.spiders.account import MfAccountSpider
+    from moneyforward.spiders.account import MfAccountSpider
 
     spider = MfAccountSpider(site="xmf_mizuho")
     assert spider.name == "account"
@@ -97,7 +97,7 @@ def test_account_spider_with_site_kwarg():
 
 
 def test_asset_allocation_spider_with_site_kwarg():
-    from moneyforward_pk.spiders.asset_allocation import MfAssetAllocationSpider
+    from moneyforward.spiders.asset_allocation import MfAssetAllocationSpider
 
     spider = MfAssetAllocationSpider(site="xmf_jabank")
     assert spider.name == "asset_allocation"
@@ -107,7 +107,7 @@ def test_asset_allocation_spider_with_site_kwarg():
 
 def test_spider_login_credentials_kwargs_override_settings():
     """``login_user`` / ``login_pass`` kwarg で settings.py の env 値を上書き."""
-    from moneyforward_pk.spiders.transaction import MfTransactionSpider
+    from moneyforward.spiders.transaction import MfTransactionSpider
 
     spider = MfTransactionSpider(
         site="mf",
@@ -133,7 +133,7 @@ def test_spider_login_credentials_kwargs_override_settings():
 )
 def test_each_partner_variant_resolves_through_transaction_spider(variant_name: str):
     """派生サイトの URL/フォームが registry 経由で取得可能."""
-    from moneyforward_pk.spiders.transaction import MfTransactionSpider
+    from moneyforward.spiders.transaction import MfTransactionSpider
 
     spider = MfTransactionSpider(site=variant_name)
     assert spider.variant.name == variant_name
@@ -147,7 +147,7 @@ def test_scrapy_loader_lists_three_generic_spiders():
     from scrapy.settings import Settings
     from scrapy.spiderloader import SpiderLoader
 
-    settings = Settings({"SPIDER_MODULES": ["moneyforward_pk.spiders"]})
+    settings = Settings({"SPIDER_MODULES": ["moneyforward.spiders"]})
     loader = SpiderLoader.from_settings(settings)
     names = set(loader.list())
     assert names == {"transaction", "account", "asset_allocation"}

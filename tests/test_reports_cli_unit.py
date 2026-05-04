@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from moneyforward_pk.reports._loader import iter_jsonl
-from moneyforward_pk.reports.cli import main
+from moneyforward.reports._loader import iter_jsonl
+from moneyforward.reports.cli import main
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "reports"
 

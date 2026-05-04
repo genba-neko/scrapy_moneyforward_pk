@@ -109,7 +109,7 @@ def test_top_page_has_no_logout_link():
 
 @pytest.mark.skipif(not LOGIN_PAGE_HTML.exists(), reason="fixture missing")
 def test_is_session_expired_true_on_login_page():
-    from moneyforward_pk.utils.session_utils import is_session_expired
+    from moneyforward.utils.session_utils import is_session_expired
 
     resp = _response(LOGIN_PAGE_HTML, "https://ssnb.x.moneyforward.com/users/sign_in")
     assert is_session_expired(resp) is True
@@ -117,7 +117,7 @@ def test_is_session_expired_true_on_login_page():
 
 @pytest.mark.skipif(not LOGGED_IN_HTML.exists(), reason="fixture missing")
 def test_is_session_expired_false_on_logged_in_home():
-    from moneyforward_pk.utils.session_utils import is_session_expired
+    from moneyforward.utils.session_utils import is_session_expired
 
     resp = _response(LOGGED_IN_HTML, "https://ssnb.x.moneyforward.com/")
     assert is_session_expired(resp) is False
