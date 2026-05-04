@@ -23,6 +23,21 @@ _DATE_SORT_RE = re.compile(r"(\d{4})/(\d+)/(\d+)-\d+")
 _ACCOUNT_TRIM_RE = re.compile(r"^(.+?)\(本サイト\).*")
 
 
+def _join_strip(texts) -> str:
+    r"""Mirror legacy ``MfSpider.join_strip`` (mf_transaction.py:271).
+
+    Concatenates text fragments and removes ``\n``, ``\t``, ``,`` plus
+    leading/trailing whitespace. Used by ``parse_accounts`` so that the
+    SHA256 input for ``account_item_key`` is byte-identical to the legacy
+    DynamoDB SK values.
+    """
+    if texts is None:
+        return ""
+    if isinstance(texts, str):
+        texts = [texts]
+    return "".join(texts).replace("\n", "").replace("\t", "").replace(",", "").strip()
+
+
 def parse_transactions(
     response: Response, year: int, month: int
 ) -> Iterator[MoneyforwardTransactionItem]:
@@ -193,24 +208,31 @@ def parse_accounts(
         if len(tds) < 4:
             continue
 
-        raw_name = "".join(tds[0].css("::text").getall()).strip()
+        # Use ``*::text`` + join_strip to mirror legacy ``mf_account.py:159``
+        # exactly (descendant text + ``\n``/``\t``/``,`` removal). The SHA256
+        # input below must be byte-identical to legacy or the resulting SK
+        # diverges from what's already stored in DynamoDB.
+        raw_name = _join_strip(tds[0].css("*::text").getall())
         if not raw_name:
             continue
         m = _ACCOUNT_TRIM_RE.match(raw_name)
         account_name = m.group(1).strip() if m else raw_name
         account_item_key = hashlib.sha256(raw_name.encode("utf-8")).hexdigest()
 
-        amount_number = "".join(tds[1].css("::text").getall()).strip()
-        account_date = "".join(tds[2].css("::text").getall()).strip()
+        amount_number = _join_strip(tds[1].css("*::text").getall())
+        account_date = _join_strip(tds[2].css("*::text").getall())
 
-        status_spans = (
-            tds[3]
-            .css(
-                'span[id^="js-status-sentence-span-"]:not([id^="js-hidden-status-sentence-span"])::text'
-            )
-            .getall()
-        )
-        account_status = " ".join(s.strip() for s in status_spans if s.strip())
+        # Mirror legacy ``mf_account.py:168-174``: walk every span in td[3],
+        # match by id substring, and pull the text of the *inner* span (legacy
+        # MF markup nested ``<span>正常</span>`` inside the status outer span).
+        # The hardcoded ``"---"`` initial value is the legacy fallback for
+        # rows whose status span is missing or empty.
+        account_status = "---"
+        for status_span in tds[3].css("span"):
+            status_id = status_span.xpath("@id").get() or ""
+            if "js-status-sentence-span-" not in status_id:
+                continue
+            account_status = _join_strip(status_span.css("span::text").get())
 
         if "更新中" in account_status:
             is_updating = True
