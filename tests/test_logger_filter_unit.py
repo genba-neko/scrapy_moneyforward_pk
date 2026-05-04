@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from moneyforward_pk.utils.log_filter import (
+from moneyforward.utils.log_filter import (
     SensitiveDataFilter,
     attach_sensitive_filter,
 )

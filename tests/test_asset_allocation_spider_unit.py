@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import scrapy
 from scrapy.http import HtmlResponse, Request, Response
 
-from moneyforward_pk.spiders.asset_allocation import MfAssetAllocationSpider
+from moneyforward.spiders.asset_allocation import MfAssetAllocationSpider
 
 _PORTFOLIO_HTML = (
     "<html><body><table>"

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from moneyforward_pk.spiders._parsers import parse_asset_allocation
+from moneyforward.spiders._parsers import parse_asset_allocation
 from tests.helpers import make_response
 
 FIXTURE_HTML = """

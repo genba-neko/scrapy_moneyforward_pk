@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from moneyforward_pk.spiders._parsers import parse_transactions
+from moneyforward.spiders._parsers import parse_transactions
 from tests.helpers import make_response
 
 FIXTURE_HTML = """

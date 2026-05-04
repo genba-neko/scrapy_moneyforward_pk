@@ -8,7 +8,7 @@ import pytest
 from scrapy import signals
 from scrapy.exceptions import NotConfigured
 
-from moneyforward_pk.extensions.slack_notifier_extension import (
+from moneyforward.extensions.slack_notifier_extension import (
     SlackNotifierExtension,
 )
 

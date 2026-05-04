@@ -1,4 +1,4 @@
-"""Pytest fixtures for moneyforward_pk.
+"""Pytest fixtures for moneyforward.
 
 Environment isolation: per-test ``monkeypatch.setenv`` is used; module-level
 ``os.environ.setdefault`` is intentionally avoided so tests cannot leak

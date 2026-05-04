@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from moneyforward_pk.pipelines import JsonArrayOutputPipeline
-from moneyforward_pk.utils.paths import (
+from moneyforward.pipelines import JsonArrayOutputPipeline
+from moneyforward.utils.paths import (
     PROJECT_ROOT,
     resolve_output_dir,
     sanitize_spider_name,

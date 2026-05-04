@@ -6,8 +6,8 @@ import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
-from moneyforward_pk.auth import SessionManager
-from moneyforward_pk.auth.session_manager import _mask_user
+from moneyforward.auth import SessionManager
+from moneyforward.auth.session_manager import _mask_user
 
 
 def _run(coro):

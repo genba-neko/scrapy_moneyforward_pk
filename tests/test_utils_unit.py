@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from moneyforward_pk.utils.playwright_utils import build_playwright_meta
-from moneyforward_pk.utils.slack_notifier import SlackNotifier
+from moneyforward.utils.playwright_utils import build_playwright_meta
+from moneyforward.utils.slack_notifier import SlackNotifier
 
 
 def test_build_playwright_meta_defaults():

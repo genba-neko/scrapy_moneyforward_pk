@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from moneyforward_pk._runner_core import (
+from moneyforward._runner_core import (
     SPIDER_TYPES,
     Account,
     Invocation,
@@ -405,7 +405,7 @@ def test_run_all_continues_after_individual_spider_failure() -> None:
     )
 
     with patch("scrapy.crawler.CrawlerRunner", return_value=fake_runner):
-        from moneyforward_pk._runner_core import run_all
+        from moneyforward._runner_core import run_all
 
         results: dict = {}
         flow = run_all(invs, settings=MagicMock(), results=results)
@@ -434,7 +434,7 @@ def test_run_all_marks_session_expiry_as_failed() -> None:
     fake_runner = _build_fake_runner(stats_by_spider_type=stats_by_type)
 
     with patch("scrapy.crawler.CrawlerRunner", return_value=fake_runner):
-        from moneyforward_pk._runner_core import run_all
+        from moneyforward._runner_core import run_all
 
         results: dict = {}
         flow = run_all(invs, settings=MagicMock(), results=results)
@@ -480,7 +480,7 @@ def test_run_all_marks_init_failure_for_all_invocations() -> None:
         "scrapy.crawler.CrawlerRunner",
         side_effect=RuntimeError("settings broken"),
     ):
-        from moneyforward_pk._runner_core import run_all
+        from moneyforward._runner_core import run_all
 
         results: dict = {}
         flow = run_all(invs, settings=MagicMock(), results=results)

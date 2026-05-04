@@ -1,4 +1,4 @@
-# scrapy_moneyforward_pk
+# scrapy_moneyforward
 
 MoneyForward クローラ (Scrapy + Playwright)。旧 `scrapy_moneyforward` の
 Splash/Lua 依存を撤廃し、`scrapy-playwright` ベースへ完全移行したもの。
@@ -38,10 +38,10 @@ copy .env.example .env
 
 ```bash
 cd src
-python -m moneyforward_pk.crawl_runner                   # 全 site × 全 account × 全種別
-python -m moneyforward_pk.crawl_runner --type transaction # 全 site × 全 account, transaction のみ
-python -m moneyforward_pk.crawl_runner --site xmf_ssnb    # xmf_ssnb のみ
-python -m moneyforward_pk.crawl_runner --list             # 起動予定一覧 (実行しない)
+python -m moneyforward.crawl_runner                   # 全 site × 全 account × 全種別
+python -m moneyforward.crawl_runner --type transaction # 全 site × 全 account, transaction のみ
+python -m moneyforward.crawl_runner --site xmf_ssnb    # xmf_ssnb のみ
+python -m moneyforward.crawl_runner --list             # 起動予定一覧 (実行しない)
 ```
 
 `config/accounts.example.yaml` をコピーして `config/accounts.yaml` を作成 (gitignore 対象)。
@@ -90,7 +90,7 @@ MONEYFORWARD_HEADLESS=false ./job_runner.sh transaction
 
 ### Site (variant) 一覧
 
-site 設定は [`spiders/variants/registry.py`](src/moneyforward_pk/spiders/variants/registry.py) の `VARIANTS` dict で管理:
+site 設定は [`spiders/variants/registry.py`](src/moneyforward/spiders/variants/registry.py) の `VARIANTS` dict で管理:
 
 | site | base URL | 由来 |
 |---|---|---|
@@ -119,13 +119,13 @@ cd src && python -m scrapy crawl transaction -a site=xmf_ssnb -a past_months=3
 
 ```powershell
 # JSONL 出力から月次収支サマリを Slack 形式で生成
-..\.venv-win\Scripts\python -m moneyforward_pk.reports balances 2026 4
+..\.venv-win\Scripts\python -m moneyforward.reports balances 2026 4
 
 # 1 年分の CSV を標準出力に書く
-..\.venv-win\Scripts\python -m moneyforward_pk.reports balances-csv 2026
+..\.venv-win\Scripts\python -m moneyforward.reports balances-csv 2026
 
 # 資産配分のサマリ
-..\.venv-win\Scripts\python -m moneyforward_pk.reports asset-allocation 2026 4 25
+..\.venv-win\Scripts\python -m moneyforward.reports asset-allocation 2026 4 25
 ```
 
 純関数 `aggregate_balances` / `aggregate_assets` / `report_message` /
@@ -138,7 +138,7 @@ cd src && python -m scrapy crawl transaction -a site=xmf_ssnb -a past_months=3
 `MoneyforwardTransactionItem` 互換形に正規化する。
 
 ```powershell
-..\.venv-win\Scripts\python -m moneyforward_pk.seccsv path/to/SaveFile.csv
+..\.venv-win\Scripts\python -m moneyforward.seccsv path/to/SaveFile.csv
 ```
 
 `tests/fixtures/seccsv/*_anonymized.csv` で 4 broker 全パスをカバーする
@@ -161,10 +161,10 @@ cd src && python -m scrapy crawl transaction -a site=xmf_ssnb -a past_months=3
 ## ディレクトリ構造
 
 ```
-scrapy_moneyforward_pk/
+scrapy_moneyforward/
 ├── src/
 │   ├── scrapy.cfg
-│   └── moneyforward_pk/
+│   └── moneyforward/
 │       ├── settings.py                 # Playwright wiring, .env 読込
 │       ├── items.py
 │       ├── pipelines.py                # JsonOutputPipeline (JSON Lines)

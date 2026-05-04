@@ -4,10 +4,10 @@ from __future__ import annotations
 
 
 def test_settings_import_and_keys():
-    from moneyforward_pk import settings
+    from moneyforward import settings
 
-    assert settings.BOT_NAME == "moneyforward_pk"
-    assert settings.SPIDER_MODULES == ["moneyforward_pk.spiders"]
+    assert settings.BOT_NAME == "moneyforward"
+    assert settings.SPIDER_MODULES == ["moneyforward.spiders"]
     assert settings.TWISTED_REACTOR == (
         "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
     )
@@ -22,7 +22,7 @@ def test_settings_import_and_keys():
 
 def test_playwright_contexts_intentionally_empty():
     """Pre-populating 'default' breaks storage_state injection; must stay empty."""
-    from moneyforward_pk import settings
+    from moneyforward import settings
 
     assert "default" not in settings.PLAYWRIGHT_CONTEXTS
 
@@ -33,7 +33,7 @@ def test_retry_http_codes_excludes_400():
     iter2 T2: re-driving a 400 cannot fix the request shape, so re-trying
     just wastes credentials and login attempts.
     """
-    from moneyforward_pk import settings
+    from moneyforward import settings
 
     assert 400 not in settings.RETRY_HTTP_CODES
     # Common transient codes must remain.

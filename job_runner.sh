@@ -55,7 +55,7 @@ esac
 
 cd src
 if [[ -n "$spider_type" ]]; then
-    exec "$PY" -m moneyforward_pk.crawl_runner --type "$spider_type" "$@"
+    exec "$PY" -m moneyforward.crawl_runner --type "$spider_type" "$@"
 else
-    exec "$PY" -m moneyforward_pk.crawl_runner "$@"
+    exec "$PY" -m moneyforward.crawl_runner "$@"
 fi

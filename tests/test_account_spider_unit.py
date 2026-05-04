@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 import scrapy
 from scrapy.http import HtmlResponse, Request, Response
 
-from moneyforward_pk.spiders.account import MfAccountSpider
+from moneyforward.spiders.account import MfAccountSpider
 
 _ONE_ROW_HTML = (
     "<html><body><table>"

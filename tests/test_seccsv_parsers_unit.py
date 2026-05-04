@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from moneyforward_pk.seccsv import _parsers as P
+from moneyforward.seccsv import _parsers as P
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "seccsv"
 

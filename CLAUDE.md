@@ -11,7 +11,7 @@
   - Type checks cleanly (`.venv-win/Scripts/pyright.exe src/ tests/`)
   - Related tests pass (`.venv-win/Scripts/pytest.exe tests/ -v`)
   - No obvious runtime errors
-- **Coverage**: Maintain `pytest --cov=src/moneyforward_pk` at 75% or higher.
+- **Coverage**: Maintain `pytest --cov=src/moneyforward` at 75% or higher.
 - **Retry Policy**: 問題発生時は自動で最大5回まで再試行し、それでも
   解消できない場合にのみユーザーへ連絡する (途中経過は報告しない)。
   - Report to user: "同じエラーが5回続いています。別のアプローチが必要かもしれません。"
@@ -34,7 +34,7 @@ See `CONTRIBUTING.md` for the contributor workflow and
 
 - This is a Python / Scrapy / scrapy-playwright project. There is no
   Flutter, Dart, or fvm tooling here.
-- Sandbox edits to `scrapy_moneyforward_pk/` only. The legacy
+- Sandbox edits to `scrapy_moneyforward/` only. The legacy
   `../scrapy_moneyforward` project is read-only reference material.
 - Do not commit `pyproject.toml` changes that conflict with uncommitted
   user edits; addopts changes are deferred until the user resolves them.
@@ -101,7 +101,7 @@ Conventional Commits: `feat:` / `fix:` / `chore:` など。
 
 - Spider クラスは 3 個のみ: `transaction` / `account` / `asset_allocation`
 - site (mf / xmf_ssnb / xmf_mizuho 等) は `-a site=xmf_ssnb` の Scrapy 引数で渡す
-- 通常運用は `crawl_runner` 経由: `cd src && python -m moneyforward_pk.crawl_runner`
+- 通常運用は `crawl_runner` 経由: `cd src && python -m moneyforward.crawl_runner`
   - `config/accounts.yaml` (gitignore) からサイト×アカウント一覧を読込、順次クロール
   - 出力は 3 ファイル集約 (`runtime/output/moneyforward_{transaction,account,asset_allocation}.json`)
 - `job_runner.sh transaction|asset|account|all` も互換維持 (内部で crawl_runner 呼出)
