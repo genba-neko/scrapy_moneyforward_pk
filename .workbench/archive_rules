@@ -13,4 +13,5 @@
 # BULK   data\output                 data\archive             output            KEEP
 # DATED  runtime\output\inspector    data\archive_inspector   inspector         DELETE
 
-BULK   data\output    data\archive    output    KEEP
+BULK   runtime\output     data\archive          output    KEEP
+DATED  runtime\inspect   data\archive_inspector  inspector   DELETE

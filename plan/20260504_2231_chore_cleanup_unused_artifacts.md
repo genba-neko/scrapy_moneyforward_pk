@@ -50,12 +50,22 @@
 
 - 用途: Bitwarden Secrets の list / read / register / dump / delete 操作 CLI
 - `src/moneyforward/secrets/` は runtime 読み込みのみで管理操作は行わない
-- **判断**: 残す場合は `README` または `docs/` にドキュメント追加。削除する場合は `gh secret` や Bitwarden Web UI で代替
+- **判断**: 残す → `tools/secrets/README.md` 追加済み ✅
 
-## 未決事項
+### Step 4: `.workbench/archive_rules` に inspect アーカイブルール追加
 
-- `tools/secrets/bws_tool.py` を残すか → **ユーザー判断待ち**
-- `docs/migration_mapping.md` をアーカイブ（`plan/` 移動）か完全削除か → **ユーザー判断待ち**
+- `runtime/inspect/` に YYYYMMDD_HHMMSS_spider 形式でディレクトリ蓄積
+- smbcnikko_pk 同様に DATED ルールで日次 zip アーカイブ → 元削除
+- 追加内容: `DATED  runtime\inspect   data\archive_inspect  inspect   DELETE` ✅
+
+## 完了事項
+
+- `tools/secrets/bws_tool.py` → 残す（`tools/secrets/README.md` 追加）✅
+- `docs/migration_mapping.md` → `plan/20260425_2227_migration_mapping.md` にアーカイブ ✅
+- `plan/USER_DIRECTIVES.md` → `plan/rules/USER_DIRECTIVES.md` に移動 ✅
+- `data/backup/.gitkeep` 追加 ✅
+- `data/fixutres_source/.gitkeep` 追加 ✅
+- `.workbench/archive_rules` に inspect DATED ルール追加 ✅
 
 ## 関連 issue
 

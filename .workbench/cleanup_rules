@@ -15,6 +15,3 @@ RDIR  .mypy_cache
 RDIR  htmlcov
 
 FILE  .coverage
-
-GLOB  logs\*
-GLOB  data\output\*
