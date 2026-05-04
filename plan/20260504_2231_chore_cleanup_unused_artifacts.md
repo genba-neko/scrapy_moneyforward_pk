@@ -1,0 +1,62 @@
+# chore: 不要アーティファクト 棚卸・削除
+
+## 背景
+
+プロジェクト成熟に伴い、過去の開発段階で作成したが現在は使われていない
+ファイル・フォルダが蓄積している。git 上の tracked ファイルを中心に整理する。
+
+## 棚卸結果
+
+### git tracked（要対応）
+
+| パス | 判定 | 理由 |
+|---|---|---|
+| `tools/secrets/bws_tool.py` | **要評価** | Bitwarden admin CLI。`src/moneyforward/secrets/` は runtime 用途で別物。ops 用として残すか判断が必要 |
+| `docs/migration_mapping.md` | **削除候補** | legacy scrapy_moneyforward (Splash) → Playwright 移行が完了。参照用途終了 |
+| `data/backup/` | **整理候補** | 空フォルダ、`.gitkeep` なし。git 上に存在意義なし |
+
+### gitignore 済み（git 対象外・ローカル清掃のみ）
+
+| パス | 内容 |
+|---|---|
+| `.venv-wsl/` | WSL Python venv。Windows 専用運用なら不要 |
+| `data/fixutres_source/` | HTML fixtures ソース（手動キャプチャ）。テストに直接不使用 |
+| `.work/olddata/` | 旧 CSV 結果。`.work/` は gitignore |
+
+### 現状維持（対応不要）
+
+| パス | 理由 |
+|---|---|
+| `requirements.txt` | `pyproject.toml` に `[project.dependencies]` なし → 依存定義の唯一ファイル |
+| `.env.example` | 全キーが `settings.py` で現役参照確認済み |
+| `job_runner.sh` / `.bat` | CLAUDE.md で互換維持対象と明記 |
+| `workbench/` (submodule) | 現役 (pre-commit hooks 等) |
+| `.workbench/` | workbench プロジェクト設定、現役 |
+| `tools/secrets/__init__.py` | `bws_tool.py` の判断に依存 |
+
+## 作業スコープ（git 対象）
+
+### Step 1: `docs/migration_mapping.md` 削除
+
+- 移行完了済み
+- 参照用途終了
+- `plan/` に移動してアーカイブ（削除でも可）
+
+### Step 2: `data/backup/` 整理
+
+- 空フォルダ → `.gitkeep` 追加か、フォルダごと `.gitignore` から除外して削除
+
+### Step 3: `tools/secrets/bws_tool.py` 用途確認・判断
+
+- 用途: Bitwarden Secrets の list / read / register / dump / delete 操作 CLI
+- `src/moneyforward/secrets/` は runtime 読み込みのみで管理操作は行わない
+- **判断**: 残す場合は `README` または `docs/` にドキュメント追加。削除する場合は `gh secret` や Bitwarden Web UI で代替
+
+## 未決事項
+
+- `tools/secrets/bws_tool.py` を残すか → **ユーザー判断待ち**
+- `docs/migration_mapping.md` をアーカイブ（`plan/` 移動）か完全削除か → **ユーザー判断待ち**
+
+## 関連 issue
+
+- issue #63（本プラン対応 issue）
