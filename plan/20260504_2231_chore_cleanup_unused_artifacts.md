@@ -58,6 +58,28 @@
 - smbcnikko_pk 同様に DATED ルールで日次 zip アーカイブ → 元削除
 - 追加内容: `DATED  runtime\inspect   data\archive_inspect  inspect   DELETE` ✅
 
+### Step 5: キャッシュディレクトリ生成抑止 (smbcnikko_pk 踏襲)
+
+smbcnikko_pk との設定統一。3 種のキャッシュを対象とする。
+
+#### `__pycache__` 抑止
+
+- `PYTHONDONTWRITEBYTECODE=1` を `job_runner.sh` の `exec` 直前に追加
+  - `job_runner.bat` → `wsl_runner.bat` → `job_runner.sh` のチェーンなので1箇所で全カバー
+- `.env.example` に `PYTHONDONTWRITEBYTECODE=1` を追記
+  - コメント: `load_dotenv()` では効果なし、シェル起動前に設定が必要
+
+#### `.pytest_cache` 抑止
+
+- `pyproject.toml` `[tool.pytest.ini_options]` addopts に `-p no:cacheprovider` 追加
+- smbcnikko_pk は `pytest.ini` で同設定済み
+
+#### `.ruff_cache` 抑止
+
+- `pyproject.toml` `[tool.ruff]` に `cache-dir = "~/.cache/ruff"` 追加
+  - プロジェクトディレクトリ外（ユーザーホーム）へ移動
+  - smbcnikko_pk には未対応 → こちら独自追加
+
 ## 完了事項
 
 - `tools/secrets/bws_tool.py` → 残す（`tools/secrets/README.md` 追加）✅
@@ -66,6 +88,9 @@
 - `data/backup/.gitkeep` 追加 ✅
 - `data/fixutres_source/.gitkeep` 追加 ✅
 - `.workbench/archive_rules` に inspect DATED ルール追加 ✅
+- `runtime/{inspect,logs,output,state}/`, `data/{archive,archive_inspector}/` `.gitkeep` 整備 ✅
+- `.gitignore` `!runtime/*/` 除外例外追加 ✅
+- `ARCHITECTURE.md` 新規・`README.md`/`CONTRIBUTING.md`/`CLAUDE.md` 最新化 ✅
 
 ## 関連 issue
 
