@@ -111,5 +111,6 @@ tools/passkey/state/**
 # -----------------------------------------------------------------------------
 config/accounts.yaml
 config/segregated_asset.yaml
+config/account_types.yaml
 config/*.local.yaml
 config/secrets/
