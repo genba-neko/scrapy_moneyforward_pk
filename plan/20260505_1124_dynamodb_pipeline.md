@@ -219,4 +219,4 @@ DYNAMODB_BATCH_N = int(os.environ.get("DYNAMODB_BATCH_N", "10"))
 
 ## ステータス
 
-[完了 PR#TBD 2026-05-05]
+[完了 PR#69 2026-05-05]
