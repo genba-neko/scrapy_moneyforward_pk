@@ -8,5 +8,6 @@ slackweb>=1.0.5
 python-dateutil>=2.8
 PyYAML>=6.0
 bitwarden-sdk==2.0.0
+boto3>=1.26
 pytest>=7.4
 pytest-cov>=4.1

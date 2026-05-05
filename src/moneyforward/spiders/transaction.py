@@ -102,7 +102,7 @@ class MfTransactionSpider(MoneyforwardBase):
 
         monthly = response.replace(body=html.encode("utf-8"))
         count = 0
-        for item in parse_transactions(monthly, year, month):
+        for item in parse_transactions(monthly):
             count += 1
             yield item
         self._inc_stat(f"{self.name}/records", count=count)
