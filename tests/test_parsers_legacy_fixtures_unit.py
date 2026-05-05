@@ -69,7 +69,7 @@ def test_parse_transactions_real_legacy(fixture_html):
     with the class on ``<tr>`` directly.
     """
     body = fixture_html("mf_transaction_legacy.html")
-    items = list(parse_transactions(_response(body), 2019, 11))
+    items = list(parse_transactions(_response(body)))
     assert len(items) == 3
     first = items[0]
     assert first["year_month"] == "201911"

@@ -91,6 +91,7 @@ DOWNLOADER_MIDDLEWARES[
 
 ITEM_PIPELINES = {
     "moneyforward.pipelines.JsonArrayOutputPipeline": 300,
+    "moneyforward.pipelines.DynamoDbPipeline": 400,
 }
 
 EXTENSIONS = {
@@ -111,10 +112,22 @@ MONEYFORWARD_LOGIN_MAX_RETRY = int(os.environ.get("MONEYFORWARD_LOGIN_MAX_RETRY"
 # Issue #40: aggregated 3-file JSON-array output (transaction / account /
 # asset_allocation), not per-spider JSONL.
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "")
+
 OUTPUT_DIR_DEFAULT = str(RUNTIME_DIR / "output")
 OUTPUT_FILENAME_TEMPLATE = os.environ.get(
     "OUTPUT_FILENAME_TEMPLATE", "moneyforward_{spider_type}.json"
 )
+
+# DynamoDB output (Issue #67: parallel write alongside JSON)
+# Table names are per spider_type; unset = that spider_type skips DynamoDB.
+# All three unset = DynamoDbPipeline disables itself entirely (NotConfigured).
+DYNAMODB_TABLE_NAME_TRANSACTION = os.environ.get("DYNAMODB_TABLE_NAME_TRANSACTION", "")
+DYNAMODB_TABLE_NAME_ASSET_ALLOCATION = os.environ.get(
+    "DYNAMODB_TABLE_NAME_ASSET_ALLOCATION", ""
+)
+DYNAMODB_TABLE_NAME_ACCOUNT = os.environ.get("DYNAMODB_TABLE_NAME_ACCOUNT", "")
+DYNAMODB_PUT_DELAY = float(os.environ.get("DYNAMODB_PUT_DELAY", "3"))
+DYNAMODB_BATCH_N = int(os.environ.get("DYNAMODB_BATCH_N", "10"))
 
 # Slack
 SLACK_INCOMING_WEBHOOK_URL = os.environ.get("SLACK_INCOMING_WEBHOOK_URL", "")

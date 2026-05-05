@@ -80,7 +80,7 @@ TRANSFER_FIXTURE_HTML = """
 
 def test_parse_transactions_manual_and_auto():
     response = make_response(FIXTURE_HTML)
-    items = list(parse_transactions(response, 2025, 1))
+    items = list(parse_transactions(response))
     assert len(items) == 2
 
     manual = items[0]
@@ -105,13 +105,13 @@ def test_parse_transactions_skips_rows_without_date():
     response = make_response(
         '<table><tr class="transaction_list"><tr><td>x</td></tr></tr></table>'
     )
-    assert list(parse_transactions(response, 2025, 1)) == []
+    assert list(parse_transactions(response)) == []
 
 
 def test_parse_transactions_extracts_transfer_branch():
     """_extract_account_cells: td.calc with non-empty data-original-title."""
     response = make_response(TRANSFER_FIXTURE_HTML)
-    items = list(parse_transactions(response, 2025, 1))
+    items = list(parse_transactions(response))
     assert len(items) == 1
     transfer = items[0]
     assert transfer["amount_number"] == -50_000
@@ -122,7 +122,7 @@ def test_parse_transactions_extracts_transfer_branch():
 def test_parse_transactions_is_active_only_when_on_row_class():
     """iter2 T2: nested .target-active in child cells must not flip is_active."""
     response = make_response(NESTED_ACTIVE_FIXTURE_HTML)
-    items = list(parse_transactions(response, 2025, 1))
+    items = list(parse_transactions(response))
     assert len(items) == 1
     assert items[0]["is_active"] is False
 
@@ -135,4 +135,30 @@ def test_parse_transactions_date_sort_re_requires_four_digit_year():
         "</tr></table>"
     )
     response = make_response(body)
-    assert list(parse_transactions(response, 2025, 1)) == []
+    assert list(parse_transactions(response)) == []
+
+
+def test_parse_transactions_year_month_uses_actual_transaction_date():
+    """year_month は閲覧ページの月ではなく実取引月から生成される（回帰防止）.
+
+    2月ページを閲覧中でも、data-table-sortable-value が 1月日付なら
+    year_month は "202501" になる。ページ月を使うバグの再発を検出する。
+    """
+    body = (
+        "<table>"
+        "<tr class='transaction_list'>"
+        "<td class='date' data-table-sortable-value='2025/01/31-999'><span>01/31</span></td>"
+        "<td class='content'><span>テスト</span></td>"
+        "<td class='amount'><span>-100</span></td>"
+        "<td class='lctg'><a>食費</a></td>"
+        "<td class='mctg'><a>食料品</a></td>"
+        "<td class='memo'><span></span></td>"
+        "</tr>"
+        "</table>"
+    )
+    response = make_response(body)
+    items = list(parse_transactions(response))
+    assert len(items) == 1
+    assert items[0]["year_month"] == "202501"  # ページ月(2月)ではなく実取引月(1月)
+    assert items[0]["year"] == 2025
+    assert items[0]["month"] == 1

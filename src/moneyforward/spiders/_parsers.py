@@ -39,7 +39,7 @@ def _join_strip(texts) -> str:
 
 
 def parse_transactions(
-    response: Response, year: int, month: int
+    response: Response,
 ) -> Iterator[MoneyforwardTransactionItem]:
     """Yield transaction items from a /cf monthly page.
 
@@ -50,8 +50,12 @@ def parse_transactions(
     that class. Both shapes are accepted via the union selector below; rows are
     de-duplicated by Selector identity to avoid double yields when a single row
     matches both legs.
+
+    ``year_month`` is derived from the actual transaction date embedded in
+    ``data-table-sortable-value``, not from the page being viewed. This matches
+    the legacy scrapy_moneyforward schema and ensures cross-month transactions
+    (e.g. a January purchase visible on the February page) are keyed correctly.
     """
-    year_month = f"{year:04d}{month:02d}"
     seen_ids: set[int] = set()
     rows = list(response.css("tr.transaction_list")) + list(
         response.css(".transaction_list tr")
@@ -86,7 +90,7 @@ def parse_transactions(
         memo = row.css("td.memo span::text").get(default="").strip()
 
         yield MoneyforwardTransactionItem(
-            year_month=year_month,
+            year_month=f"{y:04d}{mo:02d}",
             is_active=is_active,
             data_table_sortable_value=sort_value,
             year=y,
