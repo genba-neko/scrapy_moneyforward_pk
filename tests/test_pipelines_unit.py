@@ -40,10 +40,12 @@ def test_pipeline_appends_items_to_pre_initialized_file(tmp_path: Path) -> None:
         template="moneyforward_{spider_type}.json",
     )
     spider = _make_spider()
-    pipeline.open_spider(spider)
-    pipeline.process_item({"a": 1, "b": "あ"}, spider)
-    pipeline.process_item({"a": 2}, spider)
-    pipeline.close_spider(spider)
+    pipeline.crawler = MagicMock()
+    pipeline.crawler.spider = spider
+    pipeline.open_spider()
+    pipeline.process_item({"a": 1, "b": "あ"})
+    pipeline.process_item({"a": 2})
+    pipeline.close_spider()
 
     text = pre.read_text(encoding="utf-8")
     # Without the closing ``]`` the file is not yet valid JSON; closing is the
@@ -56,22 +58,27 @@ def test_pipeline_continues_appending_across_invocations(tmp_path: Path) -> None
     pre = tmp_path / "moneyforward_transaction.json"
     pre.write_text("[", encoding="utf-8")
 
+    spider = _make_spider()
+    fake_crawler = MagicMock()
+    fake_crawler.spider = spider
+
     pipeline_a = JsonArrayOutputPipeline(
         output_dir=tmp_path,
         template="moneyforward_{spider_type}.json",
     )
-    spider = _make_spider()
-    pipeline_a.open_spider(spider)
-    pipeline_a.process_item({"a": 1}, spider)
-    pipeline_a.close_spider(spider)
+    pipeline_a.crawler = fake_crawler
+    pipeline_a.open_spider()
+    pipeline_a.process_item({"a": 1})
+    pipeline_a.close_spider()
 
     pipeline_b = JsonArrayOutputPipeline(
         output_dir=tmp_path,
         template="moneyforward_{spider_type}.json",
     )
-    pipeline_b.open_spider(spider)
-    pipeline_b.process_item({"b": 2}, spider)
-    pipeline_b.close_spider(spider)
+    pipeline_b.crawler = fake_crawler
+    pipeline_b.open_spider()
+    pipeline_b.process_item({"b": 2})
+    pipeline_b.close_spider()
 
     # Append the closing bracket the way the orchestrator would.
     pre.write_text(pre.read_text(encoding="utf-8") + "]", encoding="utf-8")
@@ -85,9 +92,11 @@ def test_pipeline_self_initializes_when_file_missing(tmp_path: Path) -> None:
         template="moneyforward_{spider_type}.json",
     )
     spider = _make_spider()
-    pipeline.open_spider(spider)
-    pipeline.process_item({"x": 1}, spider)
-    pipeline.close_spider(spider)
+    pipeline.crawler = MagicMock()
+    pipeline.crawler.spider = spider
+    pipeline.open_spider()
+    pipeline.process_item({"x": 1})
+    pipeline.close_spider()
 
     out = tmp_path / "moneyforward_transaction.json"
     assert out.read_text(encoding="utf-8") == '[\n  {\n    "x": 1\n  }'
@@ -99,9 +108,12 @@ def test_pipeline_records_path_in_stats(tmp_path: Path) -> None:
         template="moneyforward_{spider_type}.json",
     )
     spider = _make_spider()
-    pipeline.open_spider(spider)
-    pipeline.close_spider(spider)
-    spider.crawler.stats.set_value.assert_any_call(
+    pipeline.crawler = MagicMock()
+    pipeline.crawler.spider = spider
+    pipeline.crawler.stats.set_value = MagicMock()
+    pipeline.open_spider()
+    pipeline.close_spider()
+    pipeline.crawler.stats.set_value.assert_any_call(
         "transaction/output/path",
         str(tmp_path / "moneyforward_transaction.json"),
     )
@@ -113,7 +125,7 @@ def test_pipeline_process_item_before_open_raises() -> None:
         template="moneyforward_{spider_type}.json",
     )
     with pytest.raises(RuntimeError):
-        pipeline.process_item({"a": 1}, _make_spider())
+        pipeline.process_item({"a": 1})
 
 
 def test_from_crawler_uses_settings() -> None:

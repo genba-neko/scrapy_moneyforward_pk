@@ -126,12 +126,13 @@ class DynamoDbPipeline:
         instance.crawler = crawler
         return instance
 
-    def open_spider(self, spider) -> None:
+    def open_spider(self) -> None:
+        spider = self.crawler.spider
         self._spider_type = getattr(spider, "spider_type", spider.name)
         self._items = []  # reset buffer on each spider open
         table_name = self.table_names.get(self._spider_type, "")
         if not table_name:
-            spider.logger.info(
+            logger.info(
                 "DynamoDbPipeline: no table configured for spider_type=%r; "
                 "DynamoDB writes will be skipped for this run.",
                 self._spider_type,
@@ -140,7 +141,7 @@ class DynamoDbPipeline:
             return
         db = resolve_dynamodb_resource()
         self.table = db.Table(table_name)
-        spider.logger.info(
+        logger.info(
             "DynamoDbPipeline open: spider_type=%r table=%r",
             self._spider_type,
             table_name,
@@ -178,11 +179,11 @@ class DynamoDbPipeline:
         finally:
             sleep(self.put_delay)
 
-    def close_spider(self, spider) -> None:
+    def close_spider(self) -> None:
         self._batch_flush(is_force=True)
         self.table = None
 
-    def process_item(self, item: Any, spider) -> Any:
+    def process_item(self, item: Any) -> Any:
         if self.table is None:
             return item
         self._items.append(item)

@@ -145,6 +145,8 @@ def test_open_spider_sets_table_when_table_name_configured():
     )
     spider = MagicMock()
     spider.spider_type = "transaction"
+    pipeline.crawler = MagicMock()
+    pipeline.crawler.spider = spider
 
     mock_table = MagicMock()
     mock_resource = MagicMock()
@@ -154,7 +156,7 @@ def test_open_spider_sets_table_when_table_name_configured():
         "moneyforward.pipelines.dynamodb.resolve_dynamodb_resource",
         return_value=mock_resource,
     ):
-        pipeline.open_spider(spider)
+        pipeline.open_spider()
 
     assert pipeline.table is mock_table
     mock_resource.Table.assert_called_once_with("mf_transaction")
@@ -168,9 +170,11 @@ def test_open_spider_leaves_table_none_when_table_name_empty():
     )
     spider = MagicMock()
     spider.spider_type = "transaction"
+    pipeline.crawler = MagicMock()
+    pipeline.crawler.spider = spider
 
     with patch("moneyforward.pipelines.dynamodb.resolve_dynamodb_resource") as mock_res:
-        pipeline.open_spider(spider)
+        pipeline.open_spider()
 
     mock_res.assert_not_called()
     assert pipeline.table is None
@@ -183,6 +187,8 @@ def test_open_spider_resets_buffer():
 
     spider = MagicMock()
     spider.spider_type = "transaction"
+    pipeline.crawler = MagicMock()
+    pipeline.crawler.spider = spider
     mock_resource = MagicMock()
     mock_resource.Table.return_value = MagicMock()
 
@@ -190,7 +196,7 @@ def test_open_spider_resets_buffer():
         "moneyforward.pipelines.dynamodb.resolve_dynamodb_resource",
         return_value=mock_resource,
     ):
-        pipeline.open_spider(spider)
+        pipeline.open_spider()
 
     assert pipeline._items == []
 
@@ -206,10 +212,10 @@ def test_process_item_flushes_when_batch_size_reached(mock_sleep):
     item1 = _make_transaction_item("20260401_001")
     item2 = _make_transaction_item("20260401_002")
 
-    pipeline.process_item(item1, MagicMock())
+    pipeline.process_item(item1)
     assert fake_batch.put_item.call_count == 0
 
-    pipeline.process_item(item2, MagicMock())
+    pipeline.process_item(item2)
     assert fake_batch.put_item.call_count == 2
     assert pipeline.crawler.stats.get_value("moneyforward/dynamodb/items") == 2
     assert pipeline._items == []
@@ -219,7 +225,7 @@ def test_process_item_flushes_when_batch_size_reached(mock_sleep):
 @patch("moneyforward.pipelines.dynamodb.sleep", return_value=None)
 def test_process_item_no_flush_before_batch_size(mock_sleep):
     pipeline, fake_batch = _make_pipeline(batch_n=5)
-    pipeline.process_item(_make_transaction_item(), MagicMock())
+    pipeline.process_item(_make_transaction_item())
     assert fake_batch.put_item.call_count == 0
     mock_sleep.assert_not_called()
 
@@ -229,14 +235,14 @@ def test_process_item_multiple_flushes_across_batches(mock_sleep):
     """T1: 5 items with batch_n=2 → 2 flushes + 1 remaining on close_spider."""
     pipeline, fake_batch = _make_pipeline(batch_n=2)
     for i in range(5):
-        pipeline.process_item(_make_transaction_item(f"20260401_{i:03}"), MagicMock())
+        pipeline.process_item(_make_transaction_item(f"20260401_{i:03}"))
 
     # After 5 items: 2 flushes of 2 items each = 4 PUT calls, 1 item buffered
     assert fake_batch.put_item.call_count == 4
     assert len(pipeline._items) == 1
     assert mock_sleep.call_count == 2
 
-    pipeline.close_spider(MagicMock())
+    pipeline.close_spider()
     assert fake_batch.put_item.call_count == 5
     assert pipeline._items == []
 
@@ -244,9 +250,9 @@ def test_process_item_multiple_flushes_across_batches(mock_sleep):
 @patch("moneyforward.pipelines.dynamodb.sleep", return_value=None)
 def test_close_spider_flushes_remaining_items(mock_sleep):
     pipeline, fake_batch = _make_pipeline(batch_n=10)
-    pipeline.process_item(_make_transaction_item(), MagicMock())
+    pipeline.process_item(_make_transaction_item())
 
-    pipeline.close_spider(MagicMock())
+    pipeline.close_spider()
 
     assert fake_batch.put_item.call_count == 1
     assert pipeline.crawler.stats.get_value("moneyforward/dynamodb/items") == 1
@@ -256,7 +262,7 @@ def test_close_spider_flushes_remaining_items(mock_sleep):
 @patch("moneyforward.pipelines.dynamodb.sleep", return_value=None)
 def test_close_spider_noop_when_buffer_empty(mock_sleep):
     pipeline, fake_batch = _make_pipeline(batch_n=10)
-    pipeline.close_spider(MagicMock())
+    pipeline.close_spider()
     fake_batch.put_item.assert_not_called()
 
 
@@ -269,7 +275,7 @@ def test_process_item_passthrough_when_table_none():
     pipeline, _ = _make_pipeline()
     pipeline.table = None
     item = _make_transaction_item()
-    result = pipeline.process_item(item, MagicMock())
+    result = pipeline.process_item(item)
     assert result is item
     assert pipeline._items == []
 
@@ -277,7 +283,7 @@ def test_process_item_passthrough_when_table_none():
 def test_close_spider_noop_when_table_none():
     pipeline, fake_batch = _make_pipeline()
     pipeline.table = None
-    pipeline.close_spider(MagicMock())
+    pipeline.close_spider()
     fake_batch.put_item.assert_not_called()
 
 
@@ -289,7 +295,7 @@ def test_close_spider_noop_when_table_none():
 @patch("moneyforward.pipelines.dynamodb.sleep", return_value=None)
 def test_batch_writer_called_with_overwrite_pkeys_for_transaction(_sleep):
     pipeline, _ = _make_pipeline(spider_type="transaction", batch_n=1)
-    pipeline.process_item(_make_transaction_item(), MagicMock())
+    pipeline.process_item(_make_transaction_item())
     pipeline.table.batch_writer.assert_called_once_with(
         overwrite_by_pkeys=["year_month", "data_table_sortable_value"]
     )
@@ -305,7 +311,7 @@ def test_batch_writer_called_with_overwrite_pkeys_for_asset_allocation(_sleep):
         "asset_type": "equity",
         "amount_value": 100000,
     }
-    pipeline.process_item(item, MagicMock())
+    pipeline.process_item(item)
     pipeline.table.batch_writer.assert_called_once_with(
         overwrite_by_pkeys=["year_month_day", "asset_item_key"]
     )
@@ -315,7 +321,7 @@ def test_batch_writer_called_with_overwrite_pkeys_for_asset_allocation(_sleep):
 def test_batch_writer_called_without_overwrite_pkeys_for_unknown_spider_type(_sleep):
     """T6: unknown spider_type has no pkeys → batch_writer called with no kwargs."""
     pipeline, _ = _make_pipeline(spider_type="unknown_type", batch_n=1)
-    pipeline.process_item(_make_transaction_item(), MagicMock())
+    pipeline.process_item(_make_transaction_item())
     pipeline.table.batch_writer.assert_called_once_with()
 
 
@@ -330,7 +336,7 @@ def test_batch_flush_raises_dropitem_on_dynamodb_error(_sleep):
     pipeline.table.batch_writer.side_effect = RuntimeError("network error")
 
     with pytest.raises(DropItem):
-        pipeline.process_item(_make_transaction_item(), MagicMock())
+        pipeline.process_item(_make_transaction_item())
 
 
 @patch("moneyforward.pipelines.dynamodb.sleep", return_value=None)
@@ -339,7 +345,7 @@ def test_batch_flush_error_increments_error_stat(_sleep):
     pipeline.table.batch_writer.side_effect = RuntimeError("boom")
 
     with pytest.raises(DropItem):
-        pipeline.process_item(_make_transaction_item(), MagicMock())
+        pipeline.process_item(_make_transaction_item())
 
     assert pipeline.crawler.stats.get_value("moneyforward/dynamodb/errors") == 1
 
@@ -351,7 +357,7 @@ def test_sleep_called_even_on_error(mock_sleep):
     pipeline.table.batch_writer.side_effect = RuntimeError("boom")
 
     with pytest.raises(DropItem):
-        pipeline.process_item(_make_transaction_item(), MagicMock())
+        pipeline.process_item(_make_transaction_item())
 
     mock_sleep.assert_called_once_with(5)
 
@@ -379,7 +385,7 @@ def test_subsequent_items_not_contaminated_after_flush_error(mock_sleep):
 
     # First item → flush fails, buffer cleared via snapshot pattern
     with pytest.raises(DropItem):
-        pipeline.process_item(_make_transaction_item("001"), MagicMock())
+        pipeline.process_item(_make_transaction_item("001"))
 
     assert pipeline._items == []
 
@@ -392,7 +398,7 @@ def test_subsequent_items_not_contaminated_after_flush_error(mock_sleep):
     pipeline.table.batch_writer.return_value = fake_ctx2
 
     next_item = _make_transaction_item("002")
-    result = pipeline.process_item(next_item, MagicMock())
+    result = pipeline.process_item(next_item)
     # batch_n=1 → flushed immediately; PUT called with only the new item
     assert result is next_item
     assert fake_batch2.put_item.call_count == 1
@@ -400,11 +406,11 @@ def test_subsequent_items_not_contaminated_after_flush_error(mock_sleep):
 
 
 # ---------------------------------------------------------------------------
-# Scrapy hook signatures (spider argument)
+# Scrapy hook signatures (no spider argument)
 # ---------------------------------------------------------------------------
 
 
-def test_open_spider_accepts_spider_argument():
+def test_open_spider_works_without_spider_argument():
     pipeline = DynamoDbPipeline(
         table_names={
             "transaction": "mf_transaction",
@@ -416,6 +422,8 @@ def test_open_spider_accepts_spider_argument():
     )
     spider = MagicMock()
     spider.spider_type = "transaction"
+    pipeline.crawler = MagicMock()
+    pipeline.crawler.spider = spider
 
     mock_resource = MagicMock()
     mock_resource.Table.return_value = MagicMock()
@@ -423,24 +431,23 @@ def test_open_spider_accepts_spider_argument():
         "moneyforward.pipelines.dynamodb.resolve_dynamodb_resource",
         return_value=mock_resource,
     ):
-        pipeline.open_spider(spider)
+        pipeline.open_spider()
 
     assert pipeline.table is not None
 
 
 @patch("moneyforward.pipelines.dynamodb.sleep", return_value=None)
-def test_process_item_accepts_spider_argument(_sleep):
+def test_process_item_works_without_spider_argument(_sleep):
     pipeline, _ = _make_pipeline(batch_n=100)
-    spider = MagicMock()
     item = _make_transaction_item()
-    result = pipeline.process_item(item, spider)
+    result = pipeline.process_item(item)
     assert result is item
 
 
-def test_close_spider_accepts_spider_argument():
+def test_close_spider_works_without_spider_argument():
     pipeline, _ = _make_pipeline(batch_n=10)
     pipeline.table = None
-    pipeline.close_spider(MagicMock())
+    pipeline.close_spider()
 
 
 # ---------------------------------------------------------------------------

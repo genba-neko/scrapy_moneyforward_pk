@@ -53,6 +53,8 @@ class JsonArrayOutputPipeline:
         self._file: IO[str] | None = None
         self._path: Path | None = None
         self._wrote_first_in_run = False
+        self.crawler: Any = None
+        self._spider_name: str = ""
 
     @classmethod
     def from_crawler(cls, crawler) -> "JsonArrayOutputPipeline":
@@ -61,11 +63,15 @@ class JsonArrayOutputPipeline:
         default_dir = Path(settings.get("OUTPUT_DIR_DEFAULT", "runtime/output"))
         output_dir = resolve_output_dir(settings.get("OUTPUT_DIR", ""), default_dir)
         template = settings.get("OUTPUT_FILENAME_TEMPLATE", DEFAULT_FILENAME_TEMPLATE)
-        return cls(output_dir=output_dir, template=template)
+        instance = cls(output_dir=output_dir, template=template)
+        instance.crawler = crawler
+        return instance
 
-    def open_spider(self, spider) -> None:
+    def open_spider(self) -> None:
         """Open the per-spider-type file in append mode."""
+        spider = self.crawler.spider
         spider_type = getattr(spider, "spider_type", spider.name)
+        self._spider_name = spider.name
         self.output_dir.mkdir(parents=True, exist_ok=True)
         # Issue #40 changed output to a fixed-name 3-file aggregate. If the
         # template does not reference ``{spider_type}``, the configured value
@@ -74,7 +80,7 @@ class JsonArrayOutputPipeline:
         # case and warn the operator instead of producing broken JSON files.
         template = self.template
         if "{spider_type}" not in template:
-            spider.logger.warning(
+            logger.warning(
                 "OUTPUT_FILENAME_TEMPLATE %r is incompatible with Issue #40; "
                 "falling back to %r. Update .env to silence this warning.",
                 template,
@@ -94,9 +100,9 @@ class JsonArrayOutputPipeline:
         size = target.stat().st_size
         self._wrote_first_in_run = size > 1
         self._file = target.open("a", encoding="utf-8")
-        spider.logger.info("JsonArrayOutputPipeline open: path=%s", target)
+        logger.info("JsonArrayOutputPipeline open: path=%s", target)
 
-    def process_item(self, item: Any, spider) -> Any:
+    def process_item(self, item: Any) -> Any:
         """Serialize ``item`` and append to the JSON array."""
         if self._file is None:
             raise RuntimeError(
@@ -110,13 +116,13 @@ class JsonArrayOutputPipeline:
         self._wrote_first_in_run = True
         return item
 
-    def close_spider(self, spider) -> None:
+    def close_spider(self) -> None:
         """Flush + close. Note: closing ``]`` is written by the runner."""
         if self._file is not None:
             self._file.flush()
             self._file.close()
             self._file = None
-        crawler = getattr(spider, "crawler", None)
-        stats = getattr(crawler, "stats", None) if crawler is not None else None
-        if stats is not None and self._path is not None:
-            stats.set_value(f"{spider.name}/output/path", str(self._path))
+        if self.crawler is not None and self._path is not None and self._spider_name:
+            self.crawler.stats.set_value(
+                f"{self._spider_name}/output/path", str(self._path)
+            )
