@@ -110,7 +110,18 @@ def setup_common_logging(
     if ax is not None:
         root.addHandler(ax)
 
-    for noisy in ("urllib3", "asyncio", "playwright"):
+    for noisy in (
+        "urllib3",
+        "asyncio",
+        "playwright",
+        "scrapy.addons",
+        "scrapy.utils.log",
+        "scrapy.middleware",
+        "scrapy.core.engine",
+        "scrapy.crawler",
+        "scrapy.extensions.telnet",
+        "scrapy-playwright",
+    ):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
     # Sensitive-data redaction on each handler so all records — including those

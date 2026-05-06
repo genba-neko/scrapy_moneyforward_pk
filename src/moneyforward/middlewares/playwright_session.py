@@ -8,6 +8,7 @@ stale session and replays the login flow before retrying the original URL.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from scrapy import Request
 from scrapy.exceptions import IgnoreRequest
@@ -20,21 +21,26 @@ logger = logging.getLogger(__name__)
 class PlaywrightSessionMiddleware:
     """Detect session expiry and retry up to ``login_max_retry`` times."""
 
+    crawler: Any  # set by from_crawler()
+
     def __init__(self, login_max_retry: int = 2) -> None:
         self.login_max_retry = login_max_retry
 
     @classmethod
     def from_crawler(cls, crawler):
-        return cls(
+        instance = cls(
             login_max_retry=crawler.settings.getint("MONEYFORWARD_LOGIN_MAX_RETRY", 2),
         )
+        instance.crawler = crawler
+        return instance
 
-    def process_response(self, request: Request, response, spider):
+    def process_response(self, request: Request, response):
         if not request.meta.get("playwright"):
             return response
         if not is_session_expired(response):
             return response
 
+        spider = self.crawler.spider
         attempts = int(request.meta.get("login_retry_times", 0))
         if attempts >= self.login_max_retry:
             spider.logger.error(
