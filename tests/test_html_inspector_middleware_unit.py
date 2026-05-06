@@ -75,7 +75,7 @@ def test_extract_sub_path_rejects_traversal(url):
 def test_disabled_middleware_does_not_create_files(tmp_path):
     mw = HtmlInspectorMiddleware(output_dir=tmp_path / "inspect", enabled=False)
     resp = _response()
-    out = mw.process_response(Request(url=resp.url), resp, _spider())
+    out = mw.process_response(Request(url=resp.url), resp)
     assert out is resp
     assert not (tmp_path / "inspect").exists()
 
@@ -83,7 +83,7 @@ def test_disabled_middleware_does_not_create_files(tmp_path):
 def test_disabled_middleware_returns_same_response(tmp_path):
     mw = HtmlInspectorMiddleware(output_dir=tmp_path / "inspect", enabled=False)
     resp = _response()
-    assert mw.process_response(Request(url=resp.url), resp, _spider()) is resp
+    assert mw.process_response(Request(url=resp.url), resp) is resp
 
 
 # ------------------------------------------------------------------
@@ -109,7 +109,7 @@ def test_spider_opened_resets_seq(tmp_path):
     spider = _spider()
     mw.spider_opened(spider)
     resp = _response()
-    mw.process_response(Request(url=resp.url), resp, spider)
+    mw.process_response(Request(url=resp.url), resp)
     assert mw._seq == 1
     mw.spider_opened(spider)
     assert mw._seq == 0
@@ -124,9 +124,8 @@ def test_spider_closed_closes_flow_log(tmp_path):
 
 def test_process_response_before_spider_opened_is_noop(tmp_path):
     mw = HtmlInspectorMiddleware(output_dir=tmp_path / "inspect", enabled=True)
-    spider = _spider()
     resp = _response()
-    result = mw.process_response(Request(url=resp.url), resp, spider)
+    result = mw.process_response(Request(url=resp.url), resp)
     assert result is resp
     assert (
         not list((tmp_path / "inspect").rglob("*.html"))
@@ -143,7 +142,7 @@ def test_process_response_before_spider_opened_is_noop(tmp_path):
 def test_enabled_middleware_dumps_html(tmp_path):
     mw, spider = _enabled_mw(tmp_path)
     resp = _response(body=b"<html><body>secret-marker</body></html>")
-    mw.process_response(Request(url=resp.url), resp, spider)
+    mw.process_response(Request(url=resp.url), resp)
     files = list(mw.run_dir.rglob("*.html"))
     assert len(files) == 1
     assert "secret-marker" in files[0].read_text(encoding="utf-8")
@@ -152,7 +151,7 @@ def test_enabled_middleware_dumps_html(tmp_path):
 def test_url_path_maps_to_subdirectory(tmp_path):
     mw, spider = _enabled_mw(tmp_path)
     resp = _response(url="https://moneyforward.com/accounts/show")
-    mw.process_response(Request(url=resp.url), resp, spider)
+    mw.process_response(Request(url=resp.url), resp)
     expected_dir = mw.run_dir / "accounts"
     assert expected_dir.exists()
     assert len(list(expected_dir.glob("*.html"))) == 1
@@ -161,7 +160,7 @@ def test_url_path_maps_to_subdirectory(tmp_path):
 def test_error_status_gets_error_suffix(tmp_path):
     mw, spider = _enabled_mw(tmp_path)
     resp = _response(url="https://moneyforward.com/accounts/show", status=404)
-    mw.process_response(Request(url=resp.url), resp, spider)
+    mw.process_response(Request(url=resp.url), resp)
     files = list(mw.run_dir.rglob("*_error.html"))
     assert len(files) == 1
 
@@ -169,7 +168,7 @@ def test_error_status_gets_error_suffix(tmp_path):
 def test_ok_status_has_no_error_suffix(tmp_path):
     mw, spider = _enabled_mw(tmp_path)
     resp = _response(url="https://moneyforward.com/accounts/show", status=200)
-    mw.process_response(Request(url=resp.url), resp, spider)
+    mw.process_response(Request(url=resp.url), resp)
     files = list(mw.run_dir.rglob("*_error.html"))
     assert len(files) == 0
 
@@ -178,7 +177,7 @@ def test_enabled_middleware_writes_unique_filenames_per_response(tmp_path):
     mw, spider = _enabled_mw(tmp_path)
     for i in range(3):
         resp = _response(url=f"https://moneyforward.com/p/{i}", body=b"<html>x</html>")
-        mw.process_response(Request(url=resp.url), resp, spider)
+        mw.process_response(Request(url=resp.url), resp)
     files = list(mw.run_dir.rglob("*.html"))
     assert len(files) == 3
     assert len({f.name for f in files}) == 3
@@ -188,7 +187,7 @@ def test_same_url_twice_writes_two_files(tmp_path):
     mw, spider = _enabled_mw(tmp_path)
     for _ in range(2):
         resp = _response(url="https://moneyforward.com/accounts/show")
-        mw.process_response(Request(url=resp.url), resp, spider)
+        mw.process_response(Request(url=resp.url), resp)
     files = list(mw.run_dir.rglob("*.html"))
     assert len(files) == 2
 
@@ -196,7 +195,7 @@ def test_same_url_twice_writes_two_files(tmp_path):
 def test_enabled_middleware_handles_empty_body(tmp_path):
     mw, spider = _enabled_mw(tmp_path)
     resp = HtmlResponse(url="https://x/", body=b"", request=Request(url="https://x/"))
-    mw.process_response(Request(url=resp.url), resp, spider)
+    mw.process_response(Request(url=resp.url), resp)
     assert not list(mw.run_dir.rglob("*.html"))
 
 
@@ -208,7 +207,7 @@ def test_enabled_middleware_handles_empty_body(tmp_path):
 def test_flow_log_contains_entries(tmp_path):
     mw, spider = _enabled_mw(tmp_path)
     resp = _response(url="https://moneyforward.com/accounts/show")
-    mw.process_response(Request(url=resp.url), resp, spider)
+    mw.process_response(Request(url=resp.url), resp)
     lines = (mw.run_dir / "flow.log").read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2  # meta + 1 entry
     entry = json.loads(lines[1])
@@ -220,7 +219,7 @@ def test_flow_log_contains_entries(tmp_path):
 def test_flow_log_error_entry(tmp_path):
     mw, spider = _enabled_mw(tmp_path)
     resp = _response(url="https://moneyforward.com/accounts/show", status=500)
-    mw.process_response(Request(url=resp.url), resp, spider)
+    mw.process_response(Request(url=resp.url), resp)
     lines = (mw.run_dir / "flow.log").read_text(encoding="utf-8").splitlines()
     entry = json.loads(lines[1])
     assert entry["error"] is True
@@ -229,7 +228,7 @@ def test_flow_log_error_entry(tmp_path):
 def test_flow_log_file_field_uses_forward_slash(tmp_path):
     mw, spider = _enabled_mw(tmp_path)
     resp = _response(url="https://moneyforward.com/accounts/show")
-    mw.process_response(Request(url=resp.url), resp, spider)
+    mw.process_response(Request(url=resp.url), resp)
     lines = (mw.run_dir / "flow.log").read_text(encoding="utf-8").splitlines()
     entry = json.loads(lines[1])
     assert "\\" not in entry["file"]
@@ -246,7 +245,7 @@ def test_playwright_listener_registered_once_per_page(tmp_path):
     for _ in range(3):
         req = Request(url="https://moneyforward.com/cf", meta={"playwright_page": page})
         resp = _response()
-        mw.process_response(req, resp, spider)
+        mw.process_response(req, resp)
     assert page.on.call_count == 1
     assert page.on.call_args == call("load", page.on.call_args[0][1])
 
@@ -257,7 +256,7 @@ def test_playwright_listener_different_pages_each_registered(tmp_path):
     for page in pages:
         req = Request(url="https://moneyforward.com/cf", meta={"playwright_page": page})
         resp = _response()
-        mw.process_response(req, resp, spider)
+        mw.process_response(req, resp)
     for page in pages:
         assert page.on.call_count == 1
 
@@ -268,7 +267,7 @@ def test_playwright_listener_callback_label(tmp_path):
     req = Request(url="https://moneyforward.com/cf", meta={"playwright_page": page})
     req.callback = MagicMock(__name__="parse_accounts")
     resp = _response()
-    mw.process_response(req, resp, spider)
+    mw.process_response(req, resp)
     assert page.on.called
     assert page.on.call_args[0][0] == "load"
 

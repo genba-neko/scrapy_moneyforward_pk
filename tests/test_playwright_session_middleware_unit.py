@@ -27,28 +27,37 @@ def _request(url="https://moneyforward.com/cf", attempts=0):
     return req
 
 
+def _mw(spider, login_max_retry: int = 2) -> PlaywrightSessionMiddleware:
+    mw = PlaywrightSessionMiddleware(login_max_retry=login_max_retry)
+    mw.crawler = MagicMock()
+    mw.crawler.spider = spider
+    return mw
+
+
 def test_passes_through_non_playwright_requests():
-    mw = PlaywrightSessionMiddleware(login_max_retry=2)
+    spider = _spider({})
+    mw = _mw(spider)
     req = Request(url="https://example.com/")
     resp = HtmlResponse(url=req.url, body=b"ok", request=req)
-    assert mw.process_response(req, resp, _spider({})) is resp
+    assert mw.process_response(req, resp) is resp
 
 
 def test_passes_through_healthy_response():
-    mw = PlaywrightSessionMiddleware(login_max_retry=2)
+    spider = _spider({})
+    mw = _mw(spider)
     req = _request()
     resp = HtmlResponse(
         url="https://moneyforward.com/cf",
         body="<html><head><title>家計簿</title></head></html>".encode("utf-8"),
         request=req,
     )
-    assert mw.process_response(req, resp, _spider({})) is resp
+    assert mw.process_response(req, resp) is resp
 
 
 def test_retries_on_login_url():
-    mw = PlaywrightSessionMiddleware(login_max_retry=2)
     stats: dict = {}
     spider = _spider(stats)
+    mw = _mw(spider)
     # Spider lacks handle_force_login → middleware returns the plain retry.
     spider.handle_force_login = None
     req = _request()
@@ -57,7 +66,7 @@ def test_retries_on_login_url():
         body="<html><head><title>ログイン</title></head></html>".encode("utf-8"),
         request=req,
     )
-    out = mw.process_response(req, resp, spider)
+    out = mw.process_response(req, resp)
     assert isinstance(out, Request)
     assert out.meta["login_retry_times"] == 1
     assert out.meta["moneyforward_force_login"] is True
@@ -66,7 +75,8 @@ def test_retries_on_login_url():
 
 def test_retry_drops_stale_playwright_page_meta():
     """Defect C2: request.copy() must not leak the closed page handle."""
-    mw = PlaywrightSessionMiddleware(login_max_retry=2)
+    spider = _spider({})
+    mw = _mw(spider)
     stale_page = MagicMock(name="closed_page")
     req = Request(
         url="https://moneyforward.com/cf",
@@ -82,9 +92,8 @@ def test_retry_drops_stale_playwright_page_meta():
         body=b"<html></html>",
         request=req,
     )
-    spider = _spider({})
     spider.handle_force_login = None
-    out = mw.process_response(req, resp, spider)
+    out = mw.process_response(req, resp)
     assert isinstance(out, Request)
     assert "playwright_page" not in out.meta
     assert "playwright_page_methods" not in out.meta
@@ -92,8 +101,8 @@ def test_retry_drops_stale_playwright_page_meta():
 
 def test_retry_invokes_handle_force_login():
     """Defect C1: middleware delegates to spider.handle_force_login when present."""
-    mw = PlaywrightSessionMiddleware(login_max_retry=2)
     spider = _spider({})
+    mw = _mw(spider)
     sentinel = Request(url="https://moneyforward.com/login")
     spider.handle_force_login = MagicMock(return_value=sentinel)
 
@@ -103,7 +112,7 @@ def test_retry_invokes_handle_force_login():
         body=b"<html></html>",
         request=req,
     )
-    out = mw.process_response(req, resp, spider)
+    out = mw.process_response(req, resp)
     assert out is sentinel
     spider.handle_force_login.assert_called_once()
     forwarded = spider.handle_force_login.call_args.args[0]
@@ -117,8 +126,9 @@ def test_stops_after_max_retry():
     invocation as ``failed: SessionExpired``."""
     from scrapy.exceptions import IgnoreRequest
 
-    mw = PlaywrightSessionMiddleware(login_max_retry=1)
     stats: dict = {}
+    spider = _spider(stats)
+    mw = _mw(spider, login_max_retry=1)
     req = _request(attempts=1)
     resp = HtmlResponse(
         url="https://moneyforward.com/sign_in",
@@ -126,7 +136,7 @@ def test_stops_after_max_retry():
         request=req,
     )
     with pytest.raises(IgnoreRequest):
-        mw.process_response(req, resp, _spider(stats))
+        mw.process_response(req, resp)
     assert stats["mf_test/session/expired_final"] == 1
 
 
@@ -141,9 +151,9 @@ def test_from_crawler_uses_settings_login_max_retry():
 
 def test_session_expiry_retry_invalidates_session_state():
     """Issue #43: middleware must drop on-disk storage_state before retry."""
-    mw = PlaywrightSessionMiddleware(login_max_retry=2)
     stats: dict = {}
     spider = _spider(stats)
+    mw = _mw(spider)
     spider.session_manager = MagicMock()
     spider.handle_force_login = MagicMock(side_effect=lambda r: r)
     req = _request(attempts=0)
@@ -154,7 +164,7 @@ def test_session_expiry_retry_invalidates_session_state():
         body=b"<html></html>",
         request=req,
     )
-    out = mw.process_response(req, resp, spider)
+    out = mw.process_response(req, resp)
     spider.session_manager.invalidate_session.assert_called_once()
     # The retry request must not carry the stale storage_state.
     assert isinstance(out, Request)
@@ -166,8 +176,8 @@ def test_retry_final_does_not_invoke_handle_force_login():
     instead it raises IgnoreRequest (Issue #40 / Opus M2)."""
     from scrapy.exceptions import IgnoreRequest
 
-    mw = PlaywrightSessionMiddleware(login_max_retry=1)
     spider = _spider({})
+    mw = _mw(spider, login_max_retry=1)
     spider.handle_force_login = MagicMock()
     req = _request(attempts=1)
     resp = HtmlResponse(
@@ -176,5 +186,5 @@ def test_retry_final_does_not_invoke_handle_force_login():
         request=req,
     )
     with pytest.raises(IgnoreRequest):
-        mw.process_response(req, resp, spider)
+        mw.process_response(req, resp)
     spider.handle_force_login.assert_not_called()

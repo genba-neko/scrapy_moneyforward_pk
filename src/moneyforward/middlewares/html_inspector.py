@@ -123,7 +123,7 @@ class HtmlInspectorMiddleware:
     # Scrapy middleware interface
     # ------------------------------------------------------------------
 
-    def process_response(self, request, response, spider):
+    def process_response(self, request, response):
         if not self.enabled:
             return response
         # Require spider_opened to have been called (run_dir and flow.log ready).
@@ -145,7 +145,7 @@ class HtmlInspectorMiddleware:
             if page is not None:
                 self._attach_playwright_listener(page, callback=callback)
         except Exception as exc:  # noqa: BLE001
-            spider.logger.warning("HtmlInspector skip: %s", exc)
+            logger.warning("HtmlInspector skip: %s", exc)
         return response
 
     # ------------------------------------------------------------------
