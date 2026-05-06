@@ -33,6 +33,15 @@ def _reset_axiom_singleton():
     _logging_mod._axiom_handler = original
 
 
+@pytest.fixture(autouse=True)
+def _reset_resolver():
+    from moneyforward.secrets import resolver
+
+    resolver.reset_for_test()
+    yield
+    resolver.reset_for_test()
+
+
 @pytest.fixture()
 def _reset_root_logging():
     root = logging.getLogger()
@@ -178,3 +187,44 @@ class TestSetupCommonLoggingAxiomIntegration:
         monkeypatch.setenv("AXIOM_ORG_ID", "my-org")
         setup_common_logging()
         assert mock_handler_cls.return_value in logging.getLogger().handlers
+
+
+class TestBuildAxiomHandlerBitwarden:
+    def test_bitwarden_path_returns_handler(self, fake_axiom):
+        from unittest.mock import patch
+
+        from moneyforward.secrets import resolver
+
+        mock_client_cls, mock_handler_cls = fake_axiom
+        secrets = {"AXIOM_TOKEN": "xaat-bws", "AXIOM_ORG_ID": "bws-org"}
+        with patch.object(resolver, "get", side_effect=lambda k: secrets[k]):
+            result = _build_axiom_handler()
+        mock_client_cls.assert_called_once_with(token="xaat-bws", org_id="bws-org")
+        assert result is mock_handler_cls.return_value
+
+    def test_secret_not_found_falls_back_to_env(self, monkeypatch, fake_axiom):
+        from unittest.mock import patch
+
+        from moneyforward.secrets import resolver
+        from moneyforward.secrets.exceptions import SecretNotFound
+
+        mock_client_cls, mock_handler_cls = fake_axiom
+        monkeypatch.setenv("AXIOM_TOKEN", "xaat-env")
+        monkeypatch.setenv("AXIOM_ORG_ID", "env-org")
+        with patch.object(resolver, "get", side_effect=SecretNotFound("key")):
+            result = _build_axiom_handler()
+        mock_client_cls.assert_called_once_with(token="xaat-env", org_id="env-org")
+        assert result is mock_handler_cls.return_value
+
+    def test_resolver_exception_falls_back_to_env(self, monkeypatch, fake_axiom):
+        from unittest.mock import patch
+
+        from moneyforward.secrets import resolver
+
+        mock_client_cls, mock_handler_cls = fake_axiom
+        monkeypatch.setenv("AXIOM_TOKEN", "xaat-env")
+        monkeypatch.setenv("AXIOM_ORG_ID", "env-org")
+        with patch.object(resolver, "get", side_effect=RuntimeError("bws down")):
+            result = _build_axiom_handler()
+        mock_client_cls.assert_called_once_with(token="xaat-env", org_id="env-org")
+        assert result is mock_handler_cls.return_value

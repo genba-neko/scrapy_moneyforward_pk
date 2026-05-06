@@ -18,9 +18,23 @@ _UNSET = object()
 _axiom_handler: logging.Handler | None | object = _UNSET
 
 
+def _resolve_axiom_key(key: str) -> str:
+    try:
+        from moneyforward.secrets import resolver
+        from moneyforward.secrets.exceptions import SecretNotFound
+
+        try:
+            return resolver.get(key).strip()
+        except SecretNotFound:
+            pass
+    except Exception:
+        pass
+    return (os.getenv(key) or "").strip()
+
+
 def _build_axiom_handler() -> logging.Handler | None:
-    token = (os.getenv("AXIOM_TOKEN") or "").strip()
-    org_id = (os.getenv("AXIOM_ORG_ID") or "").strip()
+    token = _resolve_axiom_key("AXIOM_TOKEN")
+    org_id = _resolve_axiom_key("AXIOM_ORG_ID")
     if not (token and org_id):
         return None
     dataset = os.getenv("AXIOM_DATASET", "moneyforward-crawler")
