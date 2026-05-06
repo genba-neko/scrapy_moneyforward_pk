@@ -48,4 +48,4 @@ spider インスタンスは `self.crawler.spider` 経由でアクセス。
 - [x] dynamodb.py 修正
 - [x] テスト更新
 - [x] pytest パス確認 (40 passed)
-- [ ] PR 作成
+- [x] PR 作成 [完了 PR#77 2026-05-06]
