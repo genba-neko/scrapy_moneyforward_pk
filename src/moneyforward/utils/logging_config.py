@@ -4,12 +4,47 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
+import threading
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 from moneyforward.utils.log_filter import attach_sensitive_filter
 
 _CONFIGURED_FLAG = "_moneyforward_logging_configured"
+
+_axiom_lock = threading.Lock()
+_UNSET = object()
+_axiom_handler: logging.Handler | None | object = _UNSET
+
+
+def _build_axiom_handler() -> logging.Handler | None:
+    token = (os.getenv("AXIOM_TOKEN") or "").strip()
+    org_id = (os.getenv("AXIOM_ORG_ID") or "").strip()
+    if not (token and org_id):
+        return None
+    dataset = os.getenv("AXIOM_DATASET", "moneyforward-crawler")
+    try:
+        from axiom_py import Client  # type: ignore[import]
+        from axiom_py.logging import AxiomHandler  # type: ignore[import]
+    except ImportError:
+        return None
+    try:
+        client = Client(token=token, org_id=org_id)
+        handler = AxiomHandler(client=client, dataset=dataset)
+        handler.setLevel(logging.INFO)
+        return handler
+    except Exception as e:
+        print(f"[axiom] handler init failed: {e!r}", file=sys.stderr)
+        return None
+
+
+def _get_axiom_handler() -> logging.Handler | None:
+    global _axiom_handler
+    with _axiom_lock:
+        if _axiom_handler is _UNSET:
+            _axiom_handler = _build_axiom_handler()
+    return _axiom_handler  # type: ignore[return-value]
 
 
 def setup_common_logging(
@@ -57,12 +92,16 @@ def setup_common_logging(
         fh.setLevel(level)
         root.addHandler(fh)
 
+    ax = _get_axiom_handler()
+    if ax is not None:
+        root.addHandler(ax)
+
     for noisy in ("urllib3", "asyncio", "playwright"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
-    # Sensitive-data redaction: attach to root + scrapy + project loggers so
-    # any handler downstream sees a scrubbed record. Idempotent.
-    for name in ("", "scrapy", "moneyforward"):
-        attach_sensitive_filter(logging.getLogger(name))
+    # Sensitive-data redaction on each handler so all records — including those
+    # propagated from child loggers — are scrubbed before reaching any output.
+    for handler in root.handlers:
+        attach_sensitive_filter(handler)
 
     setattr(root, _CONFIGURED_FLAG, True)

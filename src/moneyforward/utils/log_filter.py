@@ -71,38 +71,25 @@ def _scrub(text: str) -> str:
 class SensitiveDataFilter(logging.Filter):
     """Redact URL queries / cookies / auth headers / password kv pairs.
 
-    Mutates ``record.msg`` and string elements of ``record.args`` in place
-    before the formatter is invoked. Non-string args (ints, dicts, ...) are
-    left untouched.
+    Pre-formats the record via getMessage() before scrubbing so that
+    msg/args placeholders are already resolved. This prevents TypeError
+    when a pattern (e.g. _PASSWORD_KV) consumes a %s placeholder in msg
+    while args still holds the corresponding value.
     """
 
     def filter(self, record: logging.LogRecord) -> bool:  # noqa: D401
         """Apply redaction to the record and always return True."""
-        if isinstance(record.msg, str):
-            record.msg = _scrub(record.msg)
-        args = record.args
-        if isinstance(args, tuple) and args:
-            new_args: list[object] = []
-            mutated = False
-            for arg in args:
-                if isinstance(arg, str):
-                    scrubbed = _scrub(arg)
-                    new_args.append(scrubbed)
-                    if scrubbed is not arg:
-                        mutated = True
-                else:
-                    new_args.append(arg)
-            if mutated:
-                record.args = tuple(new_args)
-        elif isinstance(args, dict):
-            record.args = {
-                k: (_scrub(v) if isinstance(v, str) else v) for k, v in args.items()
-            }
+        try:
+            raw = record.getMessage()
+        except Exception:
+            raw = str(record.msg)
+        record.msg = _scrub(raw)
+        record.args = None
         return True
 
 
-def attach_sensitive_filter(logger: logging.Logger) -> None:
-    """Idempotently attach a ``SensitiveDataFilter`` to a logger."""
-    if any(isinstance(f, SensitiveDataFilter) for f in logger.filters):
+def attach_sensitive_filter(target: logging.Filterer) -> None:
+    """Idempotently attach a ``SensitiveDataFilter`` to a logger or handler."""
+    if any(isinstance(f, SensitiveDataFilter) for f in target.filters):
         return
-    logger.addFilter(SensitiveDataFilter())
+    target.addFilter(SensitiveDataFilter())
