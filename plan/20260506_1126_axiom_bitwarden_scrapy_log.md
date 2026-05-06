@@ -2,7 +2,7 @@
 
 ## ステータス
 
-- [x] `scrapy` を noisy loggers に追加
+- [x] `scrapy` を noisy loggers に追加 [完了 PR#80 2026-05-06]
 
 ## 背景
 
