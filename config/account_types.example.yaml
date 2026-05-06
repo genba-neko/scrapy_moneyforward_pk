@@ -1,0 +1,41 @@
+# 口座種別分類定義
+# config/account_types.yaml にコピーして使用:
+#   copy config/account_types.example.yaml config/account_types.yaml
+#
+# このファイルはコミット対象 (テンプレート)。
+# account_types.yaml は .gitignore 入り (個人情報含むため)。
+#
+# 各キーに口座名の配列を記述する。
+# MoneyForward 上の「口座名」をそのまま記入する。
+
+# 現金
+wallet:
+  - 現金
+  # - 財布
+
+# 電子マネー・プリペイドカード
+prepaid:
+  - PayPay
+  - Revolut
+  - nanaco
+  # - au PAY (service@example.com)
+  # - WAON
+
+# 主要ショッピングサイト
+mall:
+  - Amazon.co.jp
+  - 楽天市場(my Rakuten)
+
+# クレジットカード
+creditcard:
+  - エポスカード
+  - 楽天カード
+  - 三井住友カード
+  # - JCB CARD W
+
+# 銀行振込
+bank:
+  - ソニー銀行
+  - 住信SBIネット銀行
+  - 楽天銀行
+  # - みずほ銀行
